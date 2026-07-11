@@ -1,0 +1,111 @@
+// Esquema de base de datos - Plataforma de Catálogos y Posters
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- USUARIOS ----------
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  businessName  String?
+  logoUrl       String?
+  brandColor    String?   // color principal del "kit de marca"
+  brandFont     String?   // tipografia principal del kit de marca
+  plan          Plan      @default(FREE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  catalogs      Catalog[]
+  posters       Poster[]
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+// ---------- CATALOGOS ----------
+// Un catalogo pertenece a un usuario y contiene productos.
+// El campo "category" permite que sea de carnes, ropa, zapatos, etc.
+// sin necesidad de tablas separadas por rubro.
+model Catalog {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title         String
+  category      String    // ej: "carnes", "ropa", "zapatos", "general"
+  slug          String    @unique // usado para el link publico: /c/slug
+  templateId    String?
+  template      Template? @relation(fields: [templateId], references: [id])
+
+  // configuracion visual guardada como JSON (colores, fuentes, layout)
+  design        Json?
+
+  isPublished   Boolean   @default(false)
+  pdfUrl        String?   // ultimo PDF generado
+  viewCount     Int       @default(0)
+  downloadCount Int       @default(0)
+
+  products      Product[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ---------- PRODUCTOS ----------
+// Estructura generica que sirve para cualquier rubro.
+// "attributes" es un JSON flexible: precio por kg, talla, color, etc.
+model Product {
+  id          String   @id @default(uuid())
+  catalogId   String
+  catalog     Catalog  @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  price       Float?
+  imageUrl    String?
+  attributes  Json?    // campos dinamicos segun el rubro (ej: {"corte": "res", "talla": "M"})
+  order       Int      @default(0)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------- PLANTILLAS ----------
+// Plantillas prediseñadas por rubro de negocio
+model Template {
+  id          String    @id @default(uuid())
+  name        String
+  category    String    // "carnes", "ropa", "zapatos", "general", etc.
+  thumbnailUrl String?
+  layout      Json      // estructura del diseño (posiciones, estilos base)
+  isPremium   Boolean   @default(false)
+
+  catalogs    Catalog[]
+
+  createdAt   DateTime  @default(now())
+}
+
+// ---------- POSTERS / ANUNCIOS ----------
+model Poster {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  design      Json     // contenido del canvas: capas de texto, imagenes, formas, colores
+  imageUrl    String?  // version exportada como imagen
+  pdfUrl      String?  // version exportada como PDF
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
