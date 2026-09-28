@@ -8,15 +8,15 @@ import {
   updateCatalog,
   deleteCatalog,
 } from '../controllers/catalog.controller';
+import { exportCatalogToPDF } from '../controllers/pdf.controller';
 
 const router = Router();
 
-// Ruta publica (para ver el catalogo compartido, sin login)
 router.get('/public/:slug', getCatalogBySlug);
 
-// Rutas protegidas (requieren estar autenticado)
 router.post('/', requireAuth, createCatalog);
 router.get('/', requireAuth, getMyCatalogs);
+router.post('/export-pdf', requireAuth, exportCatalogToPDF);
 router.get('/:id', requireAuth, getCatalogById);
 router.put('/:id', requireAuth, updateCatalog);
 router.delete('/:id', requireAuth, deleteCatalog);

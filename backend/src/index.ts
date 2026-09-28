@@ -6,6 +6,7 @@ import authRoutes from './routes/auth.routes';
 import catalogRoutes from './routes/catalog.routes';
 import productRoutes from './routes/product.routes';
 import posterRoutes from './routes/poster.routes';
+import aiRoutes from './routes/ai.routes';
 
 dotenv.config();
 
@@ -14,13 +15,19 @@ const PORT = process.env.PORT || 4000;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // limite alto por si mandan imagenes en base64
+
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static('uploads'));
 
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/catalogs', catalogRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/posters', posterRoutes);
+app.use('/api/ai', aiRoutes);
+import brandKitRoutes from './routes/brandKit.routes';
+// ...
+app.use('/api/brand-kit', brandKitRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', message: 'Servidor funcionando correctamente' });

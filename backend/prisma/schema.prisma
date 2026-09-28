@@ -11,17 +11,20 @@ datasource db {
 
 // ---------- USUARIOS ----------
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  name          String
-  businessName  String?
-  logoUrl       String?
-  brandColor    String?   // color principal del "kit de marca"
-  brandFont     String?   // tipografia principal del kit de marca
-  plan          Plan      @default(FREE)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  email               String    @unique
+  password            String
+  name                String
+  businessName        String?
+  logoUrl             String?
+  brandColor          String?
+  brandSecondaryColor String?
+  brandAccentColor    String?
+  brandFont           String?
+  whatsappNumber      String?
+  plan                Plan      @default(FREE)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   catalogs      Catalog[]
   posters       Poster[]
@@ -95,17 +98,23 @@ model Template {
   createdAt   DateTime  @default(now())
 }
 
-// ---------- POSTERS / ANUNCIOS ----------
 model Poster {
   id          String   @id @default(uuid())
   userId      String
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   title       String
+  type        PosterType @default(POSTER)
   design      Json     // contenido del canvas: capas de texto, imagenes, formas, colores
   imageUrl    String?  // version exportada como imagen
   pdfUrl      String?  // version exportada como PDF
+  isPublished Boolean  @default(false)
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+}
+
+enum PosterType {
+  POSTER
+  ANUNCIO
 }

@@ -58,7 +58,11 @@ export async function getCatalogBySlug(req: AuthRequest, res: Response) {
 
   const catalog = await prisma.catalog.findUnique({
     where: { slug },
-    include: { products: { orderBy: { order: 'asc' } }, template: true },
+    include: {
+      products: { orderBy: { order: 'asc' } },
+      template: true,
+      user: { select: { whatsappNumber: true, businessName: true } },
+    },
   });
 
   if (!catalog || !catalog.isPublished) {
