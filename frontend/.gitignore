@@ -1,6 +1,15 @@
+# Dependencias
 node_modules/
-.next/
-out/
+
+# Claves y contraseñas — NUNCA subir
 .env
 .env.local
+.env.*.local
+
+# Imágenes subidas por usuarios
+backend/uploads/
+
+# Builds y cachés
+.next/
+dist/
 *.log
