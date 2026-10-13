@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import fs from 'fs';
 
 import authRoutes from './routes/auth.routes';
 import catalogRoutes from './routes/catalog.routes';
@@ -9,6 +10,7 @@ import posterRoutes from './routes/poster.routes';
 import aiRoutes from './routes/ai.routes';
 
 dotenv.config();
+fs.mkdirSync('uploads', { recursive: true });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
