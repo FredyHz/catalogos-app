@@ -14,8 +14,19 @@ fs.mkdirSync('uploads', { recursive: true });
 
 const app = express();
 const PORT = process.env.PORT || 4000;
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim());
 
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Sin origin = herramientas como Postman o el health check
+      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('Origen no permitido por CORS'));
+    },
+  })
+);
 app.use(express.json({ limit: '10mb' })); // limite alto por si mandan imagenes en base64
 
 app.use(express.urlencoded({ extended: true }));
