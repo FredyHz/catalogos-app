@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { AVAILABLE_FONTS } from './CanvasEditor';
 import QRCode from 'qrcode';
 import { notifyMascot } from '@/lib/mascotBus';
+import { T, ui } from '@/lib/editorTheme';
+import { Shapes, Type, ImagePlus, Pencil, Palette, QrCode, Save, FileDown, Upload, Minus, Plus } from 'lucide-react';
 
 const TEXT_STYLES = {
   titulo: { fontSize: 48, fontFamily: 'Poppins', fontWeight: 'bold' as const },
@@ -110,6 +112,8 @@ export default function CatalogEditor({ catalogId }: { catalogId: string }) {
   const [isErasing, setIsErasing] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStrokeId, setCurrentStrokeId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('elementos');
+  const [zoom, setZoom] = useState(1);
 
   const currentPage = pages[currentPageIndex];
   const elements = currentPage?.elements || [];
@@ -510,191 +514,242 @@ export default function CatalogEditor({ catalogId }: { catalogId: string }) {
     }
   };
 
-  const sidebarBtn = 'w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition text-sm font-medium text-gray-700';return (
-   
-   <div className="flex flex-col h-screen">
+
+  const railTabs: { id: string; label: string; icon: any }[] = [
+    { id: 'elementos', label: 'Elementos', icon: Shapes },
+    { id: 'texto', label: 'Texto', icon: Type },
+    { id: 'imagenes', label: 'Imágenes', icon: ImagePlus },
+    { id: 'dibujo', label: 'Dibujo', icon: Pencil },
+    { id: 'marca', label: 'Marca', icon: Palette },
+  ];
+
+  const panelBtn =
+    'w-full text-left px-3 py-2.5 rounded-lg border border-[#30364A] text-sm font-medium text-[#F8FAFC] transition hover:border-[#7C3AED] hover:bg-white/5';
+  const quickShape =
+    'border border-[#30364A] hover:border-[#7C3AED] hover:bg-white/5 rounded-lg p-3 flex items-center justify-center transition';
+  const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-[#A1A1B5] mb-2';
+  const zoomIn = () => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10));
+  const zoomOut = () => setZoom((z) => Math.max(0.3, Math.round((z - 0.1) * 10) / 10));
+
+  return (
+    <div className="flex flex-col h-screen text-[#F8FAFC]" style={{ backgroundColor: T.bg }}>
       {/* Barra superior */}
-             <div className="h-16 shrink-0 border-b flex items-center justify-between px-6 gap-4" style={{ backgroundColor: '#0B0E1A', borderColor: 'rgba(232,201,122,0.15)' }}>
-        <div className="flex items-center gap-4">
+      <div className="h-14 shrink-0 flex items-center justify-between px-4 gap-4 border-b" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+        <div className="flex items-center gap-3">
           <Link href="/dashboard/catalogos"><Logo size="sm" /></Link>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-                        placeholder="Título del catálogo"
-            className="border rounded-md px-3 py-1.5 text-sm w-56 text-white placeholder-gray-500"
-            style={{ backgroundColor: 'rgba(255,255,255,0.06)', borderColor: 'rgba(232,201,122,0.25)' }}
-            
+            placeholder="Título del catálogo"
+            className={`${ui.input} w-56`}
           />
         </div>
         <div className="flex items-center gap-2">
-          {savedMessage && <span className="text-sm text-gray-500 mr-2">{savedMessage}</span>}
-          <button
-            onClick={saveCatalog}
-            disabled={saving}
-            className="bg-gray-800 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 hover:bg-gray-900 transition"
-          >
+          {savedMessage && <span className="text-sm mr-2" style={{ color: T.ok }}>{savedMessage}</span>}
+          <button onClick={saveCatalog} disabled={saving} className={`${ui.ghostBtn} flex items-center gap-2`}>
+            <Save size={16} />
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
           <button
             onClick={exportToPDF}
             disabled={saving}
-            className="bg-orange-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 hover:bg-orange-700 transition"
+            className={`${ui.primaryBtn} flex items-center gap-2`}
+            style={{ background: `linear-gradient(135deg, ${T.violet}, ${T.violetBright})` }}
           >
+            <FileDown size={16} />
             Exportar PDF
           </button>
         </div>
       </div>
 
       <div className="flex flex-1 min-h-0">
-       {/* Sidebar izquierdo */}
-                     {/* Sidebar izquierdo */}
-        <div className="w-60 shrink-0 border-r overflow-y-auto p-4 space-y-6" style={{ backgroundColor: '#0B0E1A', borderColor: 'rgba(232,201,122,0.15)' }}>
-          <div>
-            <button
-              onClick={applyMyBrand}
-              className="w-full bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-amber-100 transition"
-            >
-              🎨 Aplicar mi marca
-            </button>
-          </div>
+        {/* Barra de categorías */}
+        <div className="w-[76px] shrink-0 flex flex-col items-center py-3 gap-1 border-r" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+          {railTabs.map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className="w-16 py-2.5 rounded-xl flex flex-col items-center gap-1 text-[11px] font-medium transition"
+                style={{
+                  backgroundColor: active ? 'rgba(124,58,237,0.2)' : 'transparent',
+                  color: active ? '#FFFFFF' : T.textMuted,
+                  boxShadow: active ? `inset 0 0 0 1px ${T.violet}` : 'none',
+                }}
+              >
+                <Icon size={20} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-          <div>
-            <button
-              onClick={insertQRCode}
-              className="w-full bg-sky-50 border border-sky-200 text-sky-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-sky-100 transition"
-            >
-              📱 Insertar código QR
-            </button>
-          </div>
+        {/* Panel secundario */}
+        <div className="w-72 shrink-0 overflow-y-auto p-4 space-y-4 border-r" style={{ backgroundColor: T.panel, borderColor: T.border }}>
+          {activeTab === 'elementos' && (
+            <div>
+              <h3 className={sectionTitle}>Formas</h3>
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={addRect} title="Rectángulo" className={quickShape}>
+                  <div className="w-7 h-5 bg-[#C4B5FD] rounded-sm" />
+                </button>
+                <button onClick={addCircle} title="Círculo" className={quickShape}>
+                  <div className="w-6 h-6 bg-[#C4B5FD] rounded-full" />
+                </button>
+                <button onClick={addTriangle} title="Triángulo" className={quickShape}>
+                  <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[16px] border-b-[#C4B5FD]" />
+                </button>
+                <button onClick={addLine} title="Línea" className={quickShape}>
+                  <div className="w-7 h-0.5 bg-[#C4B5FD]" />
+                </button>
+                <button onClick={addArrow} title="Flecha" className={quickShape}>
+                  <span className="text-[#C4B5FD] text-lg">→</span>
+                </button>
+                <button onClick={addStar} title="Estrella" className={quickShape}>
+                  <span className="text-[#C4B5FD] text-lg">★</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-          <div className="border border-gray-200 rounded-lg p-3 space-y-3">
-            <button
-              onClick={() => { setDrawMode((v) => !v); setSelectedId(null); }}
-              className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-                drawMode ? 'bg-gray-800 text-white' : 'border border-gray-200 hover:bg-gray-50 text-gray-700'
-              }`}
-            >
-              {drawMode ? '✏️ Pluma activa' : '✏️ Activar pluma'}
-            </button>
+          {activeTab === 'texto' && (
+            <div>
+              <h3 className={sectionTitle}>Texto</h3>
+              <div className="space-y-2">
+                <button onClick={() => addText('titulo')} className={panelBtn}>
+                  <span className="text-lg font-bold block">Añadir título</span>
+                </button>
+                <button onClick={() => addText('subtitulo')} className={panelBtn}>
+                  <span className="text-base font-semibold block">Añadir subtítulo</span>
+                </button>
+                <button onClick={() => addText('normal')} className={panelBtn}>
+                  <span className="text-sm block">Añadir texto</span>
+                </button>
+              </div>
+            </div>
+          )}
 
-            {drawMode && (
-              <>
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Estilo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'normal', label: 'Normal' },
-                      { id: 'marker', label: 'Marcador' },
-                      { id: 'pixel', label: 'Píxel' },
-                      { id: 'calligraphy', label: 'Plumín' },
-                      { id: 'sprite', label: 'Sprites' },
-                    ].map((b) => (
-                      <button
-                        key={b.id}
-                        onClick={() => { setBrushStyle(b.id as BrushStyle); setIsErasing(false); }}
-                        className={`px-2 py-1.5 rounded-md text-xs border ${
-                          brushStyle === b.id && !isErasing
-                            ? 'bg-brand-600 text-white border-brand-600'
-                            : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                        }`}
-                      >
-                        {b.label}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsErasing((v) => !v)}
-                      className={`px-2 py-1.5 rounded-md text-xs border ${
-                        isErasing ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                      }`}
-                    >
-                      🧹 Borrador
-                    </button>
-                  </div>
-                </div>
+          {activeTab === 'imagenes' && (
+            <div className="space-y-2">
+              <h3 className={sectionTitle}>Imágenes</h3>
+              <button onClick={() => fileInputRef.current?.click()} className={`${panelBtn} flex items-center gap-2`}>
+                <Upload size={16} /> Subir imagen
+              </button>
+            </div>
+          )}
 
-                {!isErasing && (
+          {activeTab === 'dibujo' && (
+            <div className="space-y-4">
+              <h3 className={sectionTitle}>Pluma</h3>
+              <button
+                onClick={() => { setDrawMode((v) => !v); setSelectedId(null); }}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold transition"
+                style={{
+                  backgroundColor: drawMode ? T.violet : 'transparent',
+                  color: '#fff',
+                  border: `1px solid ${drawMode ? T.violet : T.border}`,
+                }}
+              >
+                {drawMode ? '✏️ Pluma activa' : '✏️ Activar pluma'}
+              </button>
+
+              {drawMode && (
+                <>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Color</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Estilo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'normal', label: 'Normal' },
+                        { id: 'marker', label: 'Marcador' },
+                        { id: 'pixel', label: 'Píxel' },
+                        { id: 'calligraphy', label: 'Plumín' },
+                        { id: 'sprite', label: 'Sprites' },
+                      ].map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => { setBrushStyle(b.id as BrushStyle); setIsErasing(false); }}
+                          className="px-2 py-1.5 rounded-md text-xs border transition"
+                          style={{
+                            backgroundColor: brushStyle === b.id && !isErasing ? T.violet : 'transparent',
+                            borderColor: brushStyle === b.id && !isErasing ? T.violet : T.border,
+                            color: brushStyle === b.id && !isErasing ? '#fff' : T.textMuted,
+                          }}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setIsErasing((v) => !v)}
+                        className="px-2 py-1.5 rounded-md text-xs border transition"
+                        style={{
+                          backgroundColor: isErasing ? '#DC2626' : 'transparent',
+                          borderColor: isErasing ? '#DC2626' : T.border,
+                          color: isErasing ? '#fff' : T.textMuted,
+                        }}
+                      >
+                        🧹 Borrador
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isErasing && (
+                    <div>
+                      <label className="text-xs text-[#A1A1B5] block mb-1.5">Color</label>
+                      <input
+                        type="color"
+                        value={brushColor}
+                        onChange={(e) => setBrushColor(e.target.value)}
+                        className="w-full h-9 rounded-md cursor-pointer bg-transparent border border-[#30364A]"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Grosor: {brushSize}px</label>
                     <input
-                      type="color"
-                      value={brushColor}
-                      onChange={(e) => setBrushColor(e.target.value)}
-                      className="w-full h-9 border rounded-md cursor-pointer"
+                      type="range" min="2" max="40"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseFloat(e.target.value))}
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
-                )}
+                </>
+              )}
+            </div>
+          )}
 
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Grosor: {brushSize}px</label>
-                  <input
-                    type="range" min="2" max="40"
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Texto</h3>
+          {activeTab === 'marca' && (
             <div className="space-y-2">
-              <button onClick={() => addText('titulo')} className={sidebarBtn}>
-                <span className="text-lg font-bold block">Añadir título</span>
+              <h3 className={sectionTitle}>Marca</h3>
+              <button onClick={applyMyBrand} className={`${panelBtn} flex items-center gap-2`}>
+                <Palette size={16} /> Aplicar mi marca
               </button>
-              <button onClick={() => addText('subtitulo')} className={sidebarBtn}>
-                <span className="text-base font-semibold block">Añadir subtítulo</span>
-              </button>
-              <button onClick={() => addText('normal')} className={sidebarBtn}>
-                <span className="text-sm block">Añadir texto</span>
+              <button onClick={insertQRCode} className={`${panelBtn} flex items-center gap-2`}>
+                <QrCode size={16} /> Insertar código QR
               </button>
             </div>
-          </div>
+          )}
 
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Formas</h3>
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={addRect} title="Rectángulo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-7 h-5 bg-gray-700 rounded-sm" />
-              </button>
-              <button onClick={addCircle} title="Círculo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-6 h-6 bg-gray-700 rounded-full" />
-              </button>
-              <button onClick={addTriangle} title="Triángulo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[16px] border-b-gray-700" />
-              </button>
-              <button onClick={addLine} title="Línea" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-7 h-0.5 bg-gray-700" />
-              </button>
-              <button onClick={addArrow} title="Flecha" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <span className="text-gray-700 text-lg">→</span>
-              </button>
-              <button onClick={addStar} title="Estrella" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <span className="text-gray-700 text-lg">★</span>
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Imágenes</h3>
-            <button onClick={() => fileInputRef.current?.click()} className={sidebarBtn}>
-              📤 Subir imagen
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </div>
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
         </div>
 
         {/* Canvas central */}
-                <div className="flex-1 overflow-auto flex items-center justify-center p-8" style={{ backgroundColor: '#05060B' }}>
-          <div className="bg-white shadow-lg" style={{ position: 'relative' }}>
+        <div
+          className="flex-1 overflow-auto flex p-8"
+          style={{
+            backgroundColor: T.bg,
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+          }}
+        >
+          <div className="m-auto" style={{ width: 800 * zoom, height: 600 * zoom }}>
+            <div
+              className="bg-white shadow-2xl"
+              style={{ position: 'relative', width: 800, height: 600, transform: `scale(${zoom})`, transformOrigin: 'top left' }}
+            >
             <Stage
               ref={stageRef}
               width={800}
@@ -1056,65 +1111,38 @@ export default function CatalogEditor({ catalogId }: { catalogId: string }) {
                 }}
               />
             )}
-          </div>
-
-          {/* Miniaturas de páginas */}
-          <div className="flex gap-3 items-center flex-wrap">
-            {pages.map((page, index) => (
-              <div key={page.id} className="relative group">
-                <button
-                  onClick={() => { setCurrentPageIndex(index); setSelectedId(null); }}
-                  className={`w-20 h-14 border-2 rounded-md bg-white flex items-center justify-center text-xs font-medium ${
-                    index === currentPageIndex ? 'border-brand-600 text-brand-600' : 'border-gray-300 text-gray-500 hover:border-gray-400'
-                  }`}
-                >
-                  Página {index + 1}
-                </button>
-                {pages.length > 1 && (
-                  <button
-                    onClick={() => deletePage(index)}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
-                                    <button
-              onClick={addPage}
-              className="w-20 h-14 border-2 border-dashed rounded-md text-gray-500 hover:text-[#E8C97A] transition flex items-center justify-center text-xl"
-              style={{ borderColor: 'rgba(232,201,122,0.3)' }}
-            >
-              +
-            </button>
+            </div>
           </div>
         </div>
 
         {/* Panel derecho de propiedades */}
-               <div className="w-72 shrink-0 border-l overflow-y-auto p-4" style={{ backgroundColor: '#0B0E1A', borderColor: 'rgba(232,201,122,0.15)' }}>
+        <div className="w-72 shrink-0 overflow-y-auto p-4 border-l" style={{ backgroundColor: T.panel, borderColor: T.border }}>
           {!selectedElement && (
-            <p className="text-sm text-gray-400 mt-4 text-center">
-              Selecciona un elemento para editar sus propiedades
-            </p>
+            <div className="mt-10 text-center px-4">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(124,58,237,0.15)' }}>
+                <Shapes size={22} color={T.violet} />
+              </div>
+              <p className="text-sm font-medium text-[#F8FAFC]">Propiedades</p>
+              <p className="text-xs text-[#A1A1B5] mt-1">Selecciona un elemento del lienzo para editarlo</p>
+            </div>
           )}
-
           {selectedElement && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800">
+                <h3 className="font-semibold text-[#F8FAFC]">
                   {selectedElement.type === 'text' ? 'Texto' : selectedElement.type === 'image' ? 'Imagen' : 'Forma'}
                 </h3>
-                <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+                <button onClick={() => setSelectedId(null)} className="text-[#A1A1B5] hover:text-white">✕</button>
               </div>
 
               {selectedElement.type === 'text' && (
                 <>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Fuente</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Fuente</label>
                     <select
                       value={selectedElement.fontFamily || 'Poppins'}
                       onChange={(e) => changeFontFamily(e.target.value)}
-                      className="w-full border rounded-md px-2 py-2 text-sm"
+                      className="w-full border border-[#30364A] bg-[#11131D] text-[#F8FAFC] rounded-md px-2 py-2 text-sm"
                       style={{ fontFamily: selectedElement.fontFamily || 'Poppins' }}
                     >
                       {AVAILABLE_FONTS.map((font) => (
@@ -1124,38 +1152,38 @@ export default function CatalogEditor({ catalogId }: { catalogId: string }) {
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Tamaño</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Tamaño</label>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => changeFontSize(-2)} className="w-8 h-8 border rounded-md text-gray-600 hover:bg-gray-50">−</button>
+                      <button onClick={() => changeFontSize(-2)} className="w-8 h-8 border border-[#30364A] rounded-md text-[#A1A1B5] hover:bg-white/10">−</button>
                       <span className="text-sm w-8 text-center">{selectedElement.fontSize}</span>
-                      <button onClick={() => changeFontSize(2)} className="w-8 h-8 border rounded-md text-gray-600 hover:bg-gray-50">+</button>
+                      <button onClick={() => changeFontSize(2)} className="w-8 h-8 border border-[#30364A] rounded-md text-[#A1A1B5] hover:bg-white/10">+</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Color de texto</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Color de texto</label>
                     <input
                       type="color"
                       value={selectedElement.fill || '#111827'}
                       onChange={(e) => changeColor(e.target.value)}
-                      className="w-full h-9 border rounded-md cursor-pointer"
+                      className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Alineación</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Alineación</label>
                     <div className="flex gap-2">
-                      <button onClick={() => changeAlign('left')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'left' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>⯇</button>
-                      <button onClick={() => changeAlign('center')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'center' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>☰</button>
-                      <button onClick={() => changeAlign('right')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'right' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>⯈</button>
+                      <button onClick={() => changeAlign('left')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'left' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>⯇</button>
+                      <button onClick={() => changeAlign('center')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'center' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>☰</button>
+                      <button onClick={() => changeAlign('right')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'right' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>⯈</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Negrita</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Negrita</label>
                     <button
                       onClick={toggleBold}
-                      className={`w-full h-9 border rounded-md font-bold ${selectedElement.fontStyle === 'bold' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                      className={`w-full h-9 border border-[#30364A] rounded-md font-bold ${selectedElement.fontStyle === 'bold' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                     >
                       B
                     </button>
@@ -1165,92 +1193,136 @@ export default function CatalogEditor({ catalogId }: { catalogId: string }) {
 
               {(selectedElement.type === 'rect' || selectedElement.type === 'circle' || selectedElement.type === 'triangle' || selectedElement.type === 'star' || selectedElement.type === 'line' || selectedElement.type === 'arrow') && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Color</label>
+                  <label className="text-xs text-[#A1A1B5] block mb-1">Color</label>
                   <input
                     type="color"
                     value={selectedElement.fill || '#7C3AED'}
                     onChange={(e) => changeColor(e.target.value)}
-                    className="w-full h-9 border rounded-md cursor-pointer"
+                    className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                   />
                 </div>
               )}
 
               {selectedElement.type !== 'line' && selectedElement.type !== 'arrow' && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Bordes redondeados</label>
+                  <label className="text-xs text-[#A1A1B5] block mb-1">Bordes redondeados</label>
                   <input
                     type="range" min="0" max="50"
                     value={selectedElement.cornerRadius || 0}
                     onChange={(e) => changeCornerRadius(parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full accent-[#7C3AED]"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Opacidad</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Opacidad</label>
                 <input
                   type="range" min="0" max="1" step="0.05"
                   value={selectedElement.opacity ?? 1}
                   onChange={(e) => changeOpacity(parseFloat(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#7C3AED]"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Borde / Trazo</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Borde / Trazo</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="color"
                     value={selectedElement.strokeColor || '#000000'}
                     onChange={(e) => changeStrokeColor(e.target.value)}
-                    className="w-10 h-9 border rounded-md cursor-pointer"
+                    className="w-10 h-9 border border-[#30364A] rounded-md cursor-pointer"
                   />
                   <input
                     type="range" min="0" max="20"
                     value={selectedElement.strokeWidth || 0}
                     onChange={(e) => changeStrokeWidth(parseFloat(e.target.value))}
-                    className="flex-1"
+                    className="flex-1 accent-[#7C3AED]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Sombra</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Sombra</label>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <input
                     type="color"
                     value={selectedElement.shadowColor || '#000000'}
                     onChange={(e) => changeShadowColor(e.target.value)}
-                    className="w-full h-9 border rounded-md cursor-pointer"
+                    className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                   />
-                  <div className="flex items-center text-xs text-gray-500">Blur: {selectedElement.shadowBlur || 0}</div>
+                  <div className="flex items-center text-xs text-[#A1A1B5]">Blur: {selectedElement.shadowBlur || 0}</div>
                 </div>
                 <input
                   type="range" min="0" max="30"
                   value={selectedElement.shadowBlur || 0}
                   onChange={(e) => changeShadowBlur(parseFloat(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#7C3AED]"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Orden</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Orden</label>
                 <div className="flex gap-2">
-                  <button onClick={bringToFront} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Traer al frente</button>
-                  <button onClick={sendToBack} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Enviar al fondo</button>
+                  <button onClick={bringToFront} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Traer al frente</button>
+                  <button onClick={sendToBack} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Enviar al fondo</button>
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2 border-t">
-                <button onClick={toggleLock} className={`flex-1 border rounded-md py-2 text-sm ${selectedElement.locked ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>
+              <div className="flex gap-2 pt-2 border-t border-[#30364A]">
+                <button onClick={toggleLock} className={`flex-1 border border-[#30364A] rounded-md py-2 text-sm ${selectedElement.locked ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>
                   {selectedElement.locked ? '🔒' : '🔓'}
                 </button>
-                <button onClick={duplicateSelected} className="flex-1 border rounded-md py-2 text-sm hover:bg-gray-50">Duplicar</button>
+                <button onClick={duplicateSelected} className="flex-1 border border-[#30364A] rounded-md py-2 text-sm hover:bg-white/10">Duplicar</button>
                 <button onClick={deleteSelected} className="flex-1 bg-red-600 text-white rounded-md py-2 text-sm hover:bg-red-700">Eliminar</button>
               </div>
             </div>
           )}
+
+        </div>
+      </div>
+
+      {/* Barra inferior: páginas + zoom */}
+      <div className="h-24 shrink-0 flex items-center justify-between px-4 gap-4 border-t" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+        <div className="flex gap-3 items-center overflow-x-auto py-2 pr-2">
+          {pages.map((page, index) => (
+            <div key={page.id} className="relative group shrink-0">
+              <button
+                onClick={() => { setCurrentPageIndex(index); setSelectedId(null); }}
+                className="w-20 h-14 rounded-md bg-white flex items-center justify-center text-xs font-medium transition"
+                style={{
+                  border: `2px solid ${index === currentPageIndex ? T.violet : T.border}`,
+                  color: index === currentPageIndex ? T.violet : '#6B7280',
+                }}
+              >
+                Página {index + 1}
+              </button>
+              {pages.length > 1 && (
+                <button
+                  onClick={() => deletePage(index)}
+                  className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full text-xs opacity-0 group-hover:opacity-100 transition"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            onClick={addPage}
+            title="Agregar página"
+            className="w-20 h-14 shrink-0 rounded-md text-[#A1A1B5] hover:text-white hover:border-[#7C3AED] transition flex items-center justify-center text-xl"
+            style={{ border: `2px dashed ${T.border}` }}
+          >
+            +
+          </button>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <span className="text-xs mr-3" style={{ color: T.textMuted }}>Página {currentPageIndex + 1} de {pages.length}</span>
+          <button onClick={zoomOut} className={`${ui.iconBtn} !h-7 !w-7`} title="Alejar"><Minus size={14} /></button>
+          <button onClick={() => setZoom(1)} className="px-2 h-7 rounded-md hover:bg-white/10 text-xs text-[#F8FAFC] min-w-[52px]" title="Restablecer zoom">{Math.round(zoom * 100)}%</button>
+          <button onClick={zoomIn} className={`${ui.iconBtn} !h-7 !w-7`} title="Acercar"><Plus size={14} /></button>
         </div>
       </div>
     </div>

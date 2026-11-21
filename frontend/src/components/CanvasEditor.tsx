@@ -10,6 +10,8 @@ import { TEMPLATES } from '@/lib/templates';
 import QRCode from 'qrcode';
 import { notifyMascot } from '@/lib/mascotBus';
 import { SHAPES, SHAPE_CATEGORIES, ShapeDef } from '@/lib/shapes';
+import { T, ui } from '@/lib/editorTheme';
+import { LayoutTemplate, Shapes, Type, ImagePlus, Pencil, Palette, PaintBucket, QrCode, Search, Undo2, Redo2, Save, Download, Upload, Sparkles, Minus, Plus } from 'lucide-react';
 
 
 export const AVAILABLE_FONTS = [
@@ -130,32 +132,6 @@ interface CanvasElement {
 
 function roundRectClip(ctx: any, width: number, height: number, radius: number) {
   const r = Math.min(radius, width / 2, height / 2);
-  function getFillProps(el: CanvasElement, w: number, h: number) {
-  if (el.fillType === 'linear') {
-    const angle = ((el.gradientAngle ?? 0) * Math.PI) / 180;
-    const cx = w / 2;
-    const cy = h / 2;
-    const len = Math.sqrt(w * w + h * h) / 2;
-    const dx = Math.cos(angle) * len;
-    const dy = Math.sin(angle) * len;
-    return {
-      fillLinearGradientStartPoint: { x: cx - dx, y: cy - dy },
-      fillLinearGradientEndPoint: { x: cx + dx, y: cy + dy },
-      fillLinearGradientColorStops: [0, el.gradientStart || '#7C3AED', 1, el.gradientEnd || '#EC4899'],
-    };
-  }
-  if (el.fillType === 'radial') {
-    const r = Math.max(w, h) / 2;
-    return {
-      fillRadialGradientStartPoint: { x: w / 2, y: h / 2 },
-      fillRadialGradientEndPoint: { x: w / 2, y: h / 2 },
-      fillRadialGradientStartRadius: 0,
-      fillRadialGradientEndRadius: r,
-      fillRadialGradientColorStops: [0, el.gradientStart || '#7C3AED', 1, el.gradientEnd || '#EC4899'],
-    };
-  }
-  return { fill: el.fill };
-}
   ctx.beginPath();
   ctx.moveTo(r, 0);
   ctx.lineTo(width - r, 0);
@@ -267,11 +243,11 @@ function ShapeThumbnail({ def }: { def: ShapeDef }) {
   if (def.kind === 'path') {
     return (
       <svg viewBox="0 0 100 100" width="28" height="28">
-        <path d={def.path} fill="#4B5563" />
+        <path d={def.path} fill="#C4B5FD" />
       </svg>
     );
   }
-  const commonSvgProps = { fill: '#4B5563' };
+  const commonSvgProps = { fill: '#C4B5FD' };
   if (def.kind === 'polygon') {
     const sides = def.sides || 3;
     const pts = Array.from({ length: sides }, (_, i) => {
@@ -293,22 +269,22 @@ function ShapeThumbnail({ def }: { def: ShapeDef }) {
   if (def.kind === 'ring') {
     return (
       <svg viewBox="0 0 100 100" width="28" height="28">
-        <circle cx="50" cy="50" r={45 * (1 - (def.innerRatio ?? 0.5)) / 1 + 45 * (def.innerRatio ?? 0.5) * 0} fill="none" stroke="#4B5563" strokeWidth={45 * (1 - (def.innerRatio ?? 0.5))} />
+        <circle cx="50" cy="50" r={45 * (1 - (def.innerRatio ?? 0.5)) / 1 + 45 * (def.innerRatio ?? 0.5) * 0} fill="none" stroke="#C4B5FD" strokeWidth={45 * (1 - (def.innerRatio ?? 0.5))} />
       </svg>
     );
   }
   if (def.kind === 'arc' || def.kind === 'wedge') {
     return (
       <svg viewBox="0 0 100 100" width="28" height="28">
-        <circle cx="50" cy="50" r="40" fill="none" stroke="#4B5563" strokeWidth="8" strokeDasharray={`${((def.angle || 90) / 360) * 251} 251`} />
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#C4B5FD" strokeWidth="8" strokeDasharray={`${((def.angle || 90) / 360) * 251} 251`} />
       </svg>
     );
   }
   if (def.kind === 'arrow-dir') {
     return (
       <svg viewBox="0 0 100 100" width="28" height="28" style={{ transform: `rotate(${def.rotation || 0}deg)` }}>
-        <line x1="10" y1="50" x2="80" y2="50" stroke="#4B5563" strokeWidth="8" />
-        <polygon points="70,35 95,50 70,65" fill="#4B5563" />
+        <line x1="10" y1="50" x2="80" y2="50" stroke="#C4B5FD" strokeWidth="8" />
+        <polygon points="70,35 95,50 70,65" fill="#C4B5FD" />
       </svg>
     );
   }
@@ -1025,7 +1001,6 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
     }
   };
 
-  const sidebarBtn = 'w-full text-left px-3 py-2.5 rounded-lg border border-gray-200 hover:border-brand-400 hover:bg-brand-50 transition text-sm font-medium text-gray-700';
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
@@ -1043,6 +1018,9 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
   const [isErasing, setIsErasing] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStrokeId, setCurrentStrokeId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('plantillas');
+  const [searchQ, setSearchQ] = useState('');
+  const [zoom, setZoom] = useState(1);
 
   const applyTemplate = (templateId: string) => {
     const tpl = TEMPLATES.find((t) => t.id === templateId);
@@ -1138,80 +1116,84 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
     }
   };
 
+  const railTabs: { id: string; label: string; icon: any }[] = [
+    { id: 'plantillas', label: 'Plantillas', icon: LayoutTemplate },
+    { id: 'elementos', label: 'Elementos', icon: Shapes },
+    { id: 'texto', label: 'Texto', icon: Type },
+    { id: 'imagenes', label: 'Imágenes', icon: ImagePlus },
+    { id: 'dibujo', label: 'Dibujo', icon: Pencil },
+    { id: 'marca', label: 'Marca', icon: Palette },
+  ];
+
+  const q = searchQ.trim().toLowerCase();
+  const filteredTemplates = TEMPLATES.filter((t) => !q || t.name.toLowerCase().includes(q));
+  const filteredShapes = SHAPES.filter((s) => (q ? s.name.toLowerCase().includes(q) : s.category === shapeCategory));
+
+  const panelBtn =
+    'w-full text-left px-3 py-2.5 rounded-lg border border-[#30364A] text-sm font-medium text-[#F8FAFC] transition hover:border-[#7C3AED] hover:bg-white/5';
+  const quickShape =
+    'border border-[#30364A] hover:border-[#7C3AED] hover:bg-white/5 rounded-lg p-3 flex items-center justify-center transition';
+  const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-[#A1A1B5] mb-2';
+  const zoomIn = () => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10));
+  const zoomOut = () => setZoom((z) => Math.max(0.3, Math.round((z - 0.1) * 10) / 10));
+
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen text-[#F8FAFC]" style={{ backgroundColor: T.bg }}>
       {/* Barra superior */}
-      <div className="h-16 shrink-0 border-b bg-white flex items-center justify-between px-6 gap-4">
-        <div className="flex items-center gap-4">
+      <div className="h-14 shrink-0 flex items-center justify-between px-4 gap-4 border-b" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+        <div className="flex items-center gap-3">
           <Logo size="sm" />
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Título del diseño"
-            className="border rounded-md px-3 py-1.5 text-sm w-56"
+            className={`${ui.input} w-56`}
           />
           <div className="flex items-center gap-1">
-            <button
-              onClick={undo}
-              disabled={history.step <= 0}
-              title="Deshacer (Ctrl+Z)"
-              className="w-9 h-9 border rounded-md hover:bg-gray-50 disabled:opacity-30 flex items-center justify-center"
-            >
-              ↺
+            <button onClick={undo} disabled={history.step <= 0} title="Deshacer (Ctrl+Z)" className={ui.iconBtn}>
+              <Undo2 size={18} />
             </button>
-            <button
-              onClick={redo}
-              disabled={history.step >= history.stack.length - 1}
-              title="Rehacer (Ctrl+Y)"
-              className="w-9 h-9 border rounded-md hover:bg-gray-50 disabled:opacity-30 flex items-center justify-center"
-            >
-              ↻
+            <button onClick={redo} disabled={history.step >= history.stack.length - 1} title="Rehacer (Ctrl+Y)" className={ui.iconBtn}>
+              <Redo2 size={18} />
             </button>
           </div>
         </div>
+
         <div className="flex items-center gap-2 relative">
-          {savedMessage && <span className="text-sm text-gray-500 mr-2">{savedMessage}</span>}
-          <button
-            onClick={saveDesign}
-            disabled={saving}
-            className="bg-gray-800 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 hover:bg-gray-900 transition"
-          >
+          {savedMessage && <span className="text-sm mr-2" style={{ color: T.ok }}>{savedMessage}</span>}
+
+          <button onClick={saveDesign} disabled={saving} className={`${ui.ghostBtn} flex items-center gap-2`}>
+            <Save size={16} />
             {saving ? 'Guardando...' : 'Guardar'}
           </button>
 
           <div className="relative">
-            <button
-              onClick={() => setShowExportMenu((v) => !v)}
-              className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-md text-sm hover:bg-gray-50 transition"
-            >
-              Archivo / Exportar ▾
+            <button onClick={() => setShowExportMenu((v) => !v)} className={`${ui.ghostBtn} flex items-center gap-2`}>
+              <Download size={16} />
+              Exportar
             </button>
             {showExportMenu && (
-              <div className="absolute right-0 top-11 bg-white border rounded-md shadow-lg w-40 z-10 overflow-hidden">
-                <button onClick={() => { exportAsImage('png'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Exportar PNG</button>
-                <button onClick={() => { exportAsImage('jpeg'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Exportar JPG</button>
-                <button onClick={() => { exportToPDF(); setShowExportMenu(false); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">Exportar PDF</button>
+              <div className="absolute right-0 top-11 rounded-lg shadow-2xl w-44 z-20 overflow-hidden border" style={{ backgroundColor: T.panel, borderColor: T.border }}>
+                <button onClick={() => { exportAsImage('png'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/10">Exportar PNG</button>
+                <button onClick={() => { exportAsImage('jpeg'); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/10">Exportar JPG</button>
+                <button onClick={() => { exportToPDF(); setShowExportMenu(false); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-white/10">Exportar PDF</button>
               </div>
             )}
           </div>
 
-          <button
-            onClick={shareToWhatsApp}
-            disabled={saving}
-            className="bg-green-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50 hover:bg-green-700 transition flex items-center gap-2"
-          >
+          <button onClick={shareToWhatsApp} disabled={saving} className={`${ui.primaryBtn} flex items-center gap-2`} style={{ backgroundColor: '#16A34A' }}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M17.6 6.3A8.86 8.86 0 0 0 12.03 3.5 8.9 8.9 0 0 0 3.6 15.9L3 21l5.25-1.38a8.86 8.86 0 0 0 3.78.84h.01a8.9 8.9 0 0 0 8.86-8.88 8.83 8.83 0 0 0-3.3-6.28ZM12.04 19.1h-.01a7.4 7.4 0 0 1-3.77-1.03l-.27-.16-2.8.74.75-2.73-.18-.28a7.4 7.4 0 0 1 11.53-9.16 7.35 7.35 0 0 1 2.17 5.22 7.4 7.4 0 0 1-7.42 7.4Zm4.06-5.54c-.22-.11-1.3-.64-1.5-.72-.2-.07-.35-.11-.5.11-.14.22-.57.72-.7.87-.13.15-.26.16-.48.05a6.1 6.1 0 0 1-1.8-1.11 6.7 6.7 0 0 1-1.24-1.54c-.13-.22 0-.34.1-.45.1-.1.22-.26.33-.39.11-.13.15-.22.22-.37.07-.15.04-.28-.02-.4-.06-.11-.5-1.2-.68-1.65-.18-.43-.36-.37-.5-.38h-.43a.82.82 0 0 0-.6.28 2.5 2.5 0 0 0-.78 1.86c0 1.1.8 2.16.91 2.31.11.15 1.57 2.4 3.8 3.36.53.23.94.37 1.27.47.53.17 1.02.15 1.4.09.43-.06 1.3-.53 1.48-1.04.18-.51.18-.95.13-1.04-.05-.09-.2-.15-.42-.26Z" />
             </svg>
             Compartir
           </button>
+
           <button
             onClick={togglePublish}
             disabled={saving}
-            className={`px-4 py-2 rounded-md text-sm text-white disabled:opacity-50 transition ${
-              isPublished ? 'bg-gray-500 hover:bg-gray-600' : 'bg-brand-600 hover:bg-brand-700'
-            }`}
+            className={ui.primaryBtn}
+            style={{ background: isPublished ? '#475569' : `linear-gradient(135deg, ${T.violet}, ${T.violetBright})` }}
           >
             {isPublished ? 'Despublicar' : 'Publicar'}
           </button>
@@ -1219,190 +1201,264 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
       </div>
 
       <div className="flex flex-1 min-h-0">
-        {/* Sidebar izquierdo */}<div className="w-60 shrink-0 border-r bg-white overflow-y-auto p-4 space-y-6">
-          <div>
-            <button
-              onClick={() => setShowTemplates(true)}
-              className="w-full bg-brand-50 border border-brand-200 text-brand-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-brand-100 transition"
-            >
-              🎨 Plantillas
-            </button>
-          </div>
+        {/* Barra de categorías */}
+        <div className="w-[76px] shrink-0 flex flex-col items-center py-3 gap-1 border-r" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+          {railTabs.map((t) => {
+            const Icon = t.icon;
+            const active = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => { setActiveTab(t.id); setSearchQ(''); }}
+                className="w-16 py-2.5 rounded-xl flex flex-col items-center gap-1 text-[11px] font-medium transition"
+                style={{
+                  backgroundColor: active ? 'rgba(124,58,237,0.2)' : 'transparent',
+                  color: active ? '#FFFFFF' : T.textMuted,
+                  boxShadow: active ? `inset 0 0 0 1px ${T.violet}` : 'none',
+                }}
+              >
+                <Icon size={20} />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-          <div>
-            <button
-              onClick={() => setShowAIModal(true)}
-              className="w-full bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 text-purple-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:from-purple-100 hover:to-pink-100 transition"
-            >
-              ✨ Generar con IA
-            </button>
-            
-          </div>
-          <div>
-            <button
-              onClick={applyMyBrand}
-              className="w-full bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-amber-100 transition"
-            >
-              🎨 Aplicar mi marca
-            </button>
-          </div>
-                    <div>
-            <button
-              onClick={() => { setSelectedId(null); setShowBgPanel(true); }}
-              className="w-full bg-teal-50 border border-teal-200 text-teal-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-teal-100 transition"
-            >
-              🖼️ Fondo de página
-            </button>
-          </div>
+        {/* Panel secundario */}
+        <div className="w-72 shrink-0 overflow-y-auto p-4 space-y-4 border-r" style={{ backgroundColor: T.panel, borderColor: T.border }}>
+          {(activeTab === 'plantillas' || activeTab === 'elementos') && (
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1B5]" />
+              <input
+                value={searchQ}
+                onChange={(e) => setSearchQ(e.target.value)}
+                placeholder={activeTab === 'plantillas' ? 'Buscar plantillas' : 'Buscar formas'}
+                className={`${ui.input} w-full pl-9`}
+              />
+            </div>
+          )}
 
-          <div>
-            <button
-              onClick={insertQRCode}
-              className="w-full bg-sky-50 border border-sky-200 text-sky-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-sky-100 transition"
-            >
-              📱 Insertar código QR
-            </button>
-          </div>
+          {activeTab === 'plantillas' && (
+            <div>
+              <h3 className={sectionTitle}>Plantillas</h3>
+              <div className="grid grid-cols-2 gap-3">
+                {filteredTemplates.map((tpl) => (
+                  <button
+                    key={tpl.id}
+                    onClick={() => applyTemplate(tpl.id)}
+                    className="rounded-lg overflow-hidden border border-[#30364A] hover:border-[#7C3AED] transition text-left"
+                  >
+                    <div className="h-20 w-full" style={{ backgroundColor: tpl.previewColor }} />
+                    <div className="p-2 text-xs font-medium text-[#F8FAFC]">{tpl.name}</div>
+                  </button>
+                ))}
+              </div>
+              {filteredTemplates.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Sin resultados</p>}
+            </div>
+          )}
 
-          <div className="border border-gray-200 rounded-lg p-3 space-y-3">
-            <button
-              onClick={() => { setDrawMode((v) => !v); setSelectedId(null); }}
-              className={`w-full px-3 py-2.5 rounded-lg text-sm font-medium transition ${
-                drawMode ? 'bg-gray-800 text-white' : 'border border-gray-200 hover:bg-gray-50 text-gray-700'
-              }`}
-            >
-              {drawMode ? '✏️ Pluma activa' : '✏️ Activar pluma'}
-            </button>
-
-            {drawMode && (
-              <>
+          {activeTab === 'elementos' && (
+            <>
+              {!q && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Estilo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { id: 'normal', label: 'Normal' },
-                      { id: 'marker', label: 'Marcador' },
-                      { id: 'pixel', label: 'Píxel' },
-                      { id: 'calligraphy', label: 'Plumín' },
-                      { id: 'sprite', label: 'Sprites' },
-                    ].map((b) => (
-                      <button
-                        key={b.id}
-                        onClick={() => { setBrushStyle(b.id as BrushStyle); setIsErasing(false); }}
-                        className={`px-2 py-1.5 rounded-md text-xs border ${
-                          brushStyle === b.id && !isErasing
-                            ? 'bg-brand-600 text-white border-brand-600'
-                            : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                        }`}
-                      >
-                        {b.label}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => setIsErasing((v) => !v)}
-                      className={`px-2 py-1.5 rounded-md text-xs border ${
-                        isErasing ? 'bg-red-600 text-white border-red-600' : 'border-gray-200 hover:bg-gray-50 text-gray-600'
-                      }`}
-                    >
-                      🧹 Borrador
+                  <h3 className={sectionTitle}>Básicos</h3>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button onClick={addRect} title="Rectángulo" className={quickShape}>
+                      <div className="w-7 h-5 bg-[#C4B5FD] rounded-sm" />
+                    </button>
+                    <button onClick={addCircle} title="Círculo" className={quickShape}>
+                      <div className="w-6 h-6 bg-[#C4B5FD] rounded-full" />
+                    </button>
+                    <button onClick={addTriangle} title="Triángulo" className={quickShape}>
+                      <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[16px] border-b-[#C4B5FD]" />
+                    </button>
+                    <button onClick={addLine} title="Línea" className={quickShape}>
+                      <div className="w-7 h-0.5 bg-[#C4B5FD]" />
+                    </button>
+                    <button onClick={addArrow} title="Flecha" className={quickShape}>
+                      <span className="text-[#C4B5FD] text-lg">→</span>
+                    </button>
+                    <button onClick={addStar} title="Estrella" className={quickShape}>
+                      <span className="text-[#C4B5FD] text-lg">★</span>
                     </button>
                   </div>
                 </div>
+              )}
 
-                {!isErasing && (
+              {!q && (
+                <div className="flex gap-1.5 flex-wrap">
+                  {SHAPE_CATEGORIES.map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setShapeCategory(cat)}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium transition"
+                      style={{
+                        backgroundColor: shapeCategory === cat ? T.violet : 'rgba(255,255,255,0.06)',
+                        color: shapeCategory === cat ? '#fff' : T.textMuted,
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-4 gap-2">
+                {filteredShapes.map((s) => (
+                  <button key={s.id} onClick={() => addShapeIcon(s.id)} title={s.name} className={`${quickShape} aspect-square !p-2`}>
+                    <ShapeThumbnail def={s} />
+                  </button>
+                ))}
+              </div>
+              {filteredShapes.length === 0 && <p className="text-sm text-[#A1A1B5] text-center">Sin resultados</p>}
+            </>
+          )}
+
+          {activeTab === 'texto' && (
+            <div>
+              <h3 className={sectionTitle}>Texto</h3>
+              <div className="space-y-2">
+                <button onClick={() => addText('titulo')} className={panelBtn}>
+                  <span className="text-lg font-bold block">Añadir título</span>
+                </button>
+                <button onClick={() => addText('subtitulo')} className={panelBtn}>
+                  <span className="text-base font-semibold block">Añadir subtítulo</span>
+                </button>
+                <button onClick={() => addText('normal')} className={panelBtn}>
+                  <span className="text-sm block">Añadir texto</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'imagenes' && (
+            <div className="space-y-2">
+              <h3 className={sectionTitle}>Imágenes</h3>
+              <button onClick={() => fileInputRef.current?.click()} className={`${panelBtn} flex items-center gap-2`}>
+                <Upload size={16} /> Subir imagen
+              </button>
+              <button
+                onClick={() => setShowAIModal(true)}
+                className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center gap-2 transition hover:brightness-110"
+                style={{ background: `linear-gradient(135deg, ${T.violet}, #EC4899)` }}
+              >
+                <Sparkles size={16} /> Generar con IA
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'dibujo' && (
+            <div className="space-y-4">
+              <h3 className={sectionTitle}>Pluma</h3>
+              <button
+                onClick={() => { setDrawMode((v) => !v); setSelectedId(null); }}
+                className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold transition"
+                style={{
+                  backgroundColor: drawMode ? T.violet : 'transparent',
+                  color: '#fff',
+                  border: `1px solid ${drawMode ? T.violet : T.border}`,
+                }}
+              >
+                {drawMode ? '✏️ Pluma activa' : '✏️ Activar pluma'}
+              </button>
+
+              {drawMode && (
+                <>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Color</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Estilo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { id: 'normal', label: 'Normal' },
+                        { id: 'marker', label: 'Marcador' },
+                        { id: 'pixel', label: 'Píxel' },
+                        { id: 'calligraphy', label: 'Plumín' },
+                        { id: 'sprite', label: 'Sprites' },
+                      ].map((b) => (
+                        <button
+                          key={b.id}
+                          onClick={() => { setBrushStyle(b.id as BrushStyle); setIsErasing(false); }}
+                          className="px-2 py-1.5 rounded-md text-xs border transition"
+                          style={{
+                            backgroundColor: brushStyle === b.id && !isErasing ? T.violet : 'transparent',
+                            borderColor: brushStyle === b.id && !isErasing ? T.violet : T.border,
+                            color: brushStyle === b.id && !isErasing ? '#fff' : T.textMuted,
+                          }}
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setIsErasing((v) => !v)}
+                        className="px-2 py-1.5 rounded-md text-xs border transition"
+                        style={{
+                          backgroundColor: isErasing ? '#DC2626' : 'transparent',
+                          borderColor: isErasing ? '#DC2626' : T.border,
+                          color: isErasing ? '#fff' : T.textMuted,
+                        }}
+                      >
+                        🧹 Borrador
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isErasing && (
+                    <div>
+                      <label className="text-xs text-[#A1A1B5] block mb-1.5">Color</label>
+                      <input
+                        type="color"
+                        value={brushColor}
+                        onChange={(e) => setBrushColor(e.target.value)}
+                        className="w-full h-9 rounded-md cursor-pointer bg-transparent border border-[#30364A]"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Grosor: {brushSize}px</label>
                     <input
-                      type="color"
-                      value={brushColor}
-                      onChange={(e) => setBrushColor(e.target.value)}
-                      className="w-full h-9 border rounded-md cursor-pointer"
+                      type="range" min="2" max="40"
+                      value={brushSize}
+                      onChange={(e) => setBrushSize(parseFloat(e.target.value))}
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
-                )}
+                </>
+              )}
+            </div>
+          )}
 
-                <div>
-                  <label className="text-xs text-gray-500 block mb-1">Grosor: {brushSize}px</label>
-                  <input
-                    type="range" min="2" max="40"
-                    value={brushSize}
-                    onChange={(e) => setBrushSize(parseFloat(e.target.value))}
-                    className="w-full"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Texto</h3>
-            
-
-        
+          {activeTab === 'marca' && (
             <div className="space-y-2">
-              <button onClick={() => addText('titulo')} className={sidebarBtn}>
-                <span className="text-lg font-bold block">Añadir título</span>
+              <h3 className={sectionTitle}>Marca y página</h3>
+              <button onClick={applyMyBrand} className={`${panelBtn} flex items-center gap-2`}>
+                <Palette size={16} /> Aplicar mi marca
               </button>
-              <button onClick={() => addText('subtitulo')} className={sidebarBtn}>
-                <span className="text-base font-semibold block">Añadir subtítulo</span>
+              <button onClick={() => { setSelectedId(null); setShowBgPanel(true); }} className={`${panelBtn} flex items-center gap-2`}>
+                <PaintBucket size={16} /> Fondo de página
               </button>
-              <button onClick={() => addText('normal')} className={sidebarBtn}>
-                <span className="text-sm block">Añadir texto</span>
-              </button>
-            </div>
-          </div>
-
-        <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Formas</h3>
-            <div className="grid grid-cols-3 gap-2 mb-2">
-              <button onClick={addRect} title="Rectángulo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-7 h-5 bg-gray-700 rounded-sm" />
-              </button>
-              <button onClick={addCircle} title="Círculo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-6 h-6 bg-gray-700 rounded-full" />
-              </button>
-              <button onClick={addTriangle} title="Triángulo" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[16px] border-b-gray-700" />
-              </button>
-              <button onClick={addLine} title="Línea" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <div className="w-7 h-0.5 bg-gray-700" />
-              </button>
-              <button onClick={addArrow} title="Flecha" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <span className="text-gray-700 text-lg">→</span>
-              </button>
-              <button onClick={addStar} title="Estrella" className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition">
-                <span className="text-gray-700 text-lg">★</span>
+              <button onClick={insertQRCode} className={`${panelBtn} flex items-center gap-2`}>
+                <QrCode size={16} /> Insertar código QR
               </button>
             </div>
-            <button
-              onClick={() => setShowShapesModal(true)}
-              className="w-full bg-violet-50 border border-violet-200 text-violet-700 px-3 py-2.5 rounded-lg text-sm font-medium hover:bg-violet-100 transition"
-            >
-              🔺 Más formas
-            </button>
-          </div>
+          )}
 
-          <div>
-            <h3 className="text-xs font-semibold text-gray-400 uppercase mb-2">Imágenes</h3>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className={sidebarBtn}
-            >
-              📤 Subir imagen
-            </button>
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handleImageUpload}
-              className="hidden"
-            />
-          </div>
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
         </div>
 
         {/* Canvas central */}
-        <div className="flex-1 bg-gray-100 overflow-auto flex items-center justify-center p-8">
-          <div className="bg-white shadow-lg" style={{ position: 'relative' }}>
+        <div
+          className="flex-1 overflow-auto flex p-8"
+          style={{
+            backgroundColor: T.bg,
+            backgroundImage: 'radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px)',
+            backgroundSize: '22px 22px',
+          }}
+        >
+          <div className="m-auto" style={{ width: 800 * zoom, height: 600 * zoom }}>
+            <div
+              className="bg-white shadow-2xl"
+              style={{ position: 'relative', width: 800, height: 600, transform: `scale(${zoom})`, transformOrigin: 'top left' }}
+            >
             <Stage
               ref={stageRef}
               width={800}
@@ -1783,40 +1839,44 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                 }}
               />
             )}
+            </div>
           </div>
         </div>
 
         {/* Panel derecho de propiedades */}
-                <div className="w-72 shrink-0 border-l bg-white overflow-y-auto p-4">
+        <div className="w-72 shrink-0 overflow-y-auto p-4 border-l" style={{ backgroundColor: T.panel, borderColor: T.border }}>
           {!selectedElement && !showBgPanel && (
-            <p className="text-sm text-gray-400 mt-4 text-center">
-              Selecciona un elemento para editar sus propiedades
-            </p>
+            <div className="mt-10 text-center px-4">
+              <div className="mx-auto mb-3 w-12 h-12 rounded-xl flex items-center justify-center" style={{ backgroundColor: 'rgba(124,58,237,0.15)' }}>
+                <Shapes size={22} color={T.violet} />
+              </div>
+              <p className="text-sm font-medium text-[#F8FAFC]">Propiedades</p>
+              <p className="text-xs text-[#A1A1B5] mt-1">Selecciona un elemento del lienzo para editarlo</p>
+            </div>
           )}
-
           {!selectedElement && showBgPanel && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800">Fondo de página</h3>
-                <button onClick={() => setShowBgPanel(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+                <h3 className="font-semibold text-[#F8FAFC]">Fondo de página</h3>
+                <button onClick={() => setShowBgPanel(false)} className="text-[#A1A1B5] hover:text-white">✕</button>
               </div>
 
               <div className="flex gap-2 mb-2">
                 <button
                   onClick={() => patchBg({ fillType: 'solid' })}
-                  className={`flex-1 h-8 border rounded-md text-xs ${(!canvasBg.fillType || canvasBg.fillType === 'solid') ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                  className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${(!canvasBg.fillType || canvasBg.fillType === 'solid') ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                 >
                   Sólido
                 </button>
                 <button
                   onClick={() => patchBg({ fillType: 'linear', gradientStart: canvasBg.gradientStart || canvasBg.fill || '#7C3AED', gradientEnd: canvasBg.gradientEnd || '#ffffff' })}
-                  className={`flex-1 h-8 border rounded-md text-xs ${canvasBg.fillType === 'linear' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                  className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${canvasBg.fillType === 'linear' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                 >
                   Lineal
                 </button>
                 <button
                   onClick={() => patchBg({ fillType: 'radial', gradientStart: canvasBg.gradientStart || canvasBg.fill || '#7C3AED', gradientEnd: canvasBg.gradientEnd || '#ffffff' })}
-                  className={`flex-1 h-8 border rounded-md text-xs ${canvasBg.fillType === 'radial' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                  className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${canvasBg.fillType === 'radial' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                 >
                   Radial
                 </button>
@@ -1827,7 +1887,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                   type="color"
                   value={canvasBg.fill || '#ffffff'}
                   onChange={(e) => patchBg({ fill: e.target.value })}
-                  className="w-full h-9 border rounded-md cursor-pointer"
+                  className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                 />
               )}
 
@@ -1838,23 +1898,23 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                       type="color"
                       value={canvasBg.gradientStart || '#7C3AED'}
                       onChange={(e) => patchBg({ gradientStart: e.target.value })}
-                      className="flex-1 h-9 border rounded-md cursor-pointer"
+                      className="flex-1 h-9 border border-[#30364A] rounded-md cursor-pointer"
                     />
                     <input
                       type="color"
                       value={canvasBg.gradientEnd || '#ffffff'}
                       onChange={(e) => patchBg({ gradientEnd: e.target.value })}
-                      className="flex-1 h-9 border rounded-md cursor-pointer"
+                      className="flex-1 h-9 border border-[#30364A] rounded-md cursor-pointer"
                     />
                   </div>
                   {canvasBg.fillType === 'linear' && (
                     <div>
-                      <label className="text-xs text-gray-400 block mb-1">Ángulo: {canvasBg.gradientAngle ?? 0}°</label>
+                      <label className="text-xs text-[#A1A1B5] block mb-1">Ángulo: {canvasBg.gradientAngle ?? 0}°</label>
                       <input
                         type="range" min="0" max="360"
                         value={canvasBg.gradientAngle ?? 0}
                         onChange={(e) => patchBg({ gradientAngle: parseFloat(e.target.value) })}
-                        className="w-full"
+                        className="w-full accent-[#7C3AED]"
                       />
                     </div>
                   )}
@@ -1866,20 +1926,20 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
           {selectedElement && (
             <div className="space-y-5">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-800">
+                <h3 className="font-semibold text-[#F8FAFC]">
                   {selectedElement.type === 'text' ? 'Texto' : selectedElement.type === 'image' ? 'Imagen' : 'Forma'}
                 </h3>
-                <button onClick={() => setSelectedId(null)} className="text-gray-400 hover:text-gray-600">✕</button>
+                <button onClick={() => setSelectedId(null)} className="text-[#A1A1B5] hover:text-white">✕</button>
               </div>
 
               {selectedElement.type === 'text' && (
                 <>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Fuente</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Fuente</label>
                     <select
                       value={selectedElement.fontFamily || 'Poppins'}
                       onChange={(e) => changeFontFamily(e.target.value)}
-                      className="w-full border rounded-md px-2 py-2 text-sm"
+                      className="w-full border border-[#30364A] bg-[#11131D] text-[#F8FAFC] rounded-md px-2 py-2 text-sm"
                       style={{ fontFamily: selectedElement.fontFamily || 'Poppins' }}
                     >
                       {AVAILABLE_FONTS.map((font) => (
@@ -1889,60 +1949,60 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Tamaño</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Tamaño</label>
                     <div className="flex items-center gap-2">
-                      <button onClick={() => changeFontSize(-2)} className="w-8 h-8 border rounded-md text-gray-600 hover:bg-gray-50">−</button>
+                      <button onClick={() => changeFontSize(-2)} className="w-8 h-8 border border-[#30364A] rounded-md text-[#A1A1B5] hover:bg-white/10">−</button>
                       <span className="text-sm w-8 text-center">{selectedElement.fontSize}</span>
-                      <button onClick={() => changeFontSize(2)} className="w-8 h-8 border rounded-md text-gray-600 hover:bg-gray-50">+</button>
+                      <button onClick={() => changeFontSize(2)} className="w-8 h-8 border border-[#30364A] rounded-md text-[#A1A1B5] hover:bg-white/10">+</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Color de texto</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Color de texto</label>
                     <input
                       type="color"
                       value={selectedElement.fill || '#111827'}
                       onChange={(e) => changeColor(e.target.value)}
-                      className="w-full h-9 border rounded-md cursor-pointer"
+                      className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Alineación</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Alineación</label>
                     <div className="flex gap-2">
-                      <button onClick={() => changeAlign('left')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'left' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>⯇</button>
-                      <button onClick={() => changeAlign('center')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'center' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>☰</button>
-                      <button onClick={() => changeAlign('right')} className={`flex-1 h-9 border rounded-md ${selectedElement.align === 'right' ? 'bg-brand-600 text-white' : 'hover:bg-gray-50'}`}>⯈</button>
+                      <button onClick={() => changeAlign('left')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'left' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>⯇</button>
+                      <button onClick={() => changeAlign('center')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'center' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>☰</button>
+                      <button onClick={() => changeAlign('right')} className={`flex-1 h-9 border border-[#30364A] rounded-md ${selectedElement.align === 'right' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>⯈</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Estilo</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Estilo</label>
                     <div className="flex gap-2">
-                      <button onClick={toggleBold} className={`flex-1 h-9 border rounded-md font-bold ${selectedElement.fontStyle === 'bold' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>B</button>
-                      <button onClick={toggleUnderline} className={`flex-1 h-9 border rounded-md underline ${selectedElement.textDecoration === 'underline' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>U</button>
-                      <button onClick={toggleStrikethrough} className={`flex-1 h-9 border rounded-md line-through ${selectedElement.textDecoration === 'line-through' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>S</button>
-                      <button onClick={toggleUppercase} className={`flex-1 h-9 border rounded-md text-xs ${selectedElement.uppercase ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>AA</button>
+                      <button onClick={toggleBold} className={`flex-1 h-9 border border-[#30364A] rounded-md font-bold ${selectedElement.fontStyle === 'bold' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>B</button>
+                      <button onClick={toggleUnderline} className={`flex-1 h-9 border border-[#30364A] rounded-md underline ${selectedElement.textDecoration === 'underline' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>U</button>
+                      <button onClick={toggleStrikethrough} className={`flex-1 h-9 border border-[#30364A] rounded-md line-through ${selectedElement.textDecoration === 'line-through' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>S</button>
+                      <button onClick={toggleUppercase} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.uppercase ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>AA</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Interlineado</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Interlineado</label>
                     <input
                       type="range" min="0.8" max="2.5" step="0.1"
                       value={selectedElement.lineHeight || 1.2}
                       onChange={(e) => changeLineHeight(parseFloat(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Interletra</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Interletra</label>
                     <input
                       type="range" min="-2" max="20" step="0.5"
                       value={selectedElement.letterSpacing || 0}
                       onChange={(e) => changeLetterSpacing(parseFloat(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
                 </>
@@ -1950,23 +2010,23 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
 
                             {(selectedElement.type === 'rect' || selectedElement.type === 'circle' || selectedElement.type === 'triangle' || selectedElement.type === 'star' || selectedElement.type === 'line' || selectedElement.type === 'arrow' || selectedElement.type === 'icon' || selectedElement.type === 'text') && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Relleno</label>
+                  <label className="text-xs text-[#A1A1B5] block mb-1">Relleno</label>
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => patchSelected({ fillType: 'solid' })}
-                      className={`flex-1 h-8 border rounded-md text-xs ${(!selectedElement.fillType || selectedElement.fillType === 'solid') ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                      className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${(!selectedElement.fillType || selectedElement.fillType === 'solid') ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                     >
                       Sólido
                     </button>
                     <button
                       onClick={() => patchSelected({ fillType: 'linear', gradientStart: selectedElement.gradientStart || selectedElement.fill || '#7C3AED', gradientEnd: selectedElement.gradientEnd || '#EC4899' })}
-                      className={`flex-1 h-8 border rounded-md text-xs ${selectedElement.fillType === 'linear' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                      className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${selectedElement.fillType === 'linear' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                     >
                       Lineal
                     </button>
                     <button
                       onClick={() => patchSelected({ fillType: 'radial', gradientStart: selectedElement.gradientStart || selectedElement.fill || '#7C3AED', gradientEnd: selectedElement.gradientEnd || '#EC4899' })}
-                      className={`flex-1 h-8 border rounded-md text-xs ${selectedElement.fillType === 'radial' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}
+                      className={`flex-1 h-8 border border-[#30364A] rounded-md text-xs ${selectedElement.fillType === 'radial' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}
                     >
                       Radial
                     </button>
@@ -1977,7 +2037,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                       type="color"
                       value={selectedElement.fill || '#7C3AED'}
                       onChange={(e) => changeColor(e.target.value)}
-                      className="w-full h-9 border rounded-md cursor-pointer"
+                      className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                     />
                   )}
 
@@ -1988,23 +2048,23 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                           type="color"
                           value={selectedElement.gradientStart || '#7C3AED'}
                           onChange={(e) => patchSelected({ gradientStart: e.target.value })}
-                          className="flex-1 h-9 border rounded-md cursor-pointer"
+                          className="flex-1 h-9 border border-[#30364A] rounded-md cursor-pointer"
                         />
                         <input
                           type="color"
                           value={selectedElement.gradientEnd || '#EC4899'}
                           onChange={(e) => patchSelected({ gradientEnd: e.target.value })}
-                          className="flex-1 h-9 border rounded-md cursor-pointer"
+                          className="flex-1 h-9 border border-[#30364A] rounded-md cursor-pointer"
                         />
                       </div>
                       {selectedElement.fillType === 'linear' && (
                         <div>
-                          <label className="text-xs text-gray-400 block mb-1">Ángulo: {selectedElement.gradientAngle ?? 0}°</label>
+                          <label className="text-xs text-[#A1A1B5] block mb-1">Ángulo: {selectedElement.gradientAngle ?? 0}°</label>
                           <input
                             type="range" min="0" max="360"
                             value={selectedElement.gradientAngle ?? 0}
                             onChange={(e) => patchSelected({ gradientAngle: parseFloat(e.target.value) })}
-                            className="w-full"
+                            className="w-full accent-[#7C3AED]"
                           />
                         </div>
                       )}
@@ -2015,45 +2075,45 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
               {selectedElement.type === 'image' && (
                 <>
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Voltear</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Voltear</label>
                     <div className="flex gap-2">
-                      <button onClick={toggleFlipX} className={`flex-1 h-9 border rounded-md text-xs ${selectedElement.flipX ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>↔ Horizontal</button>
-                      <button onClick={toggleFlipY} className={`flex-1 h-9 border rounded-md text-xs ${selectedElement.flipY ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>↕ Vertical</button>
+                      <button onClick={toggleFlipX} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.flipX ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>↔ Horizontal</button>
+                      <button onClick={toggleFlipY} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.flipY ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>↕ Vertical</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Filtro</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Filtro</label>
                     <div className="flex gap-2">
-                      <button onClick={() => applyImageFilter('none')} className={`flex-1 h-9 border rounded-md text-xs ${(!selectedElement.filterType || selectedElement.filterType === 'none') ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>Normal</button>
-                      <button onClick={() => applyImageFilter('grayscale')} className={`flex-1 h-9 border rounded-md text-xs ${selectedElement.filterType === 'grayscale' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>B/N</button>
-                      <button onClick={() => applyImageFilter('sepia')} className={`flex-1 h-9 border rounded-md text-xs ${selectedElement.filterType === 'sepia' ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>Sepia</button>
+                      <button onClick={() => applyImageFilter('none')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${(!selectedElement.filterType || selectedElement.filterType === 'none') ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>Normal</button>
+                      <button onClick={() => applyImageFilter('grayscale')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.filterType === 'grayscale' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>B/N</button>
+                      <button onClick={() => applyImageFilter('sepia')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.filterType === 'sepia' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>Sepia</button>
                     </div>
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Brillo</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Brillo</label>
                     <input
                       type="range" min="-100" max="100"
                       value={selectedElement.brightness || 0}
                       onChange={(e) => changeBrightness(parseFloat(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Contraste</label>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Contraste</label>
                     <input
                       type="range" min="-100" max="100"
                       value={selectedElement.contrast || 0}
                       onChange={(e) => changeContrast(parseFloat(e.target.value))}
-                      className="w-full"
+                      className="w-full accent-[#7C3AED]"
                     />
                   </div>
 
                   <div>
-                    <label className="text-xs text-gray-500 block mb-1">Recorte</label>
-                    <button onClick={smartSquareCrop} className="w-full h-9 border rounded-md text-xs hover:bg-gray-50">
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Recorte</label>
+                    <button onClick={smartSquareCrop} className="w-full h-9 border border-[#30364A] rounded-md text-xs hover:bg-white/10">
                       Recortar a cuadrado
                     </button>
                   </div>
@@ -2063,188 +2123,136 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
 
               {selectedElement.type !== 'line' && selectedElement.type !== 'arrow' && (
                 <div>
-                  <label className="text-xs text-gray-500 block mb-1">Bordes redondeados</label>
+                  <label className="text-xs text-[#A1A1B5] block mb-1">Bordes redondeados</label>
                   <input
                     type="range" min="0" max="50"
                     value={selectedElement.cornerRadius || 0}
                     onChange={(e) => changeCornerRadius(parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full accent-[#7C3AED]"
                   />
                 </div>
               )}
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Opacidad</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Opacidad</label>
                 <input
                   type="range" min="0" max="1" step="0.05"
                   value={selectedElement.opacity ?? 1}
                   onChange={(e) => changeOpacity(parseFloat(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-[#7C3AED]"
                 />
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Borde / Trazo</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Borde / Trazo</label>
                 <div className="flex gap-2 items-center">
                   <input
                     type="color"
                     value={selectedElement.strokeColor || '#000000'}
                     onChange={(e) => changeStrokeColor(e.target.value)}
-                    className="w-10 h-9 border rounded-md cursor-pointer"
+                    className="w-10 h-9 border border-[#30364A] rounded-md cursor-pointer"
                   />
                   <input
                     type="range" min="0" max="20"
                     value={selectedElement.strokeWidth || 0}
                     onChange={(e) => changeStrokeWidth(parseFloat(e.target.value))}
-                    className="flex-1"
+                    className="flex-1 accent-[#7C3AED]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Sombra</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Sombra</label>
                 <div className="grid grid-cols-2 gap-2 mb-2">
                   <input
                     type="color"
                     value={selectedElement.shadowColor || '#000000'}
                     onChange={(e) => changeShadowColor(e.target.value)}
-                    className="w-full h-9 border rounded-md cursor-pointer"
+                    className="w-full h-9 border border-[#30364A] rounded-md cursor-pointer"
                   />
-                  <div className="flex items-center text-xs text-gray-500">Blur: {selectedElement.shadowBlur || 0}</div>
+                  <div className="flex items-center text-xs text-[#A1A1B5]">Blur: {selectedElement.shadowBlur || 0}</div>
                 </div>
                 <input
                   type="range" min="0" max="30"
                   value={selectedElement.shadowBlur || 0}
                   onChange={(e) => changeShadowBlur(parseFloat(e.target.value))}
-                  className="w-full mb-1"
+                  className="w-full mb-1 accent-[#7C3AED]"
                 />
                 <div className="grid grid-cols-2 gap-2">
                   <input
                     type="range" min="-20" max="20"
                     value={selectedElement.shadowOffsetX || 0}
                     onChange={(e) => changeShadowOffsetX(parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full accent-[#7C3AED]"
                   />
                   <input
                     type="range" min="-20" max="20"
                     value={selectedElement.shadowOffsetY || 0}
                     onChange={(e) => changeShadowOffsetY(parseFloat(e.target.value))}
-                    className="w-full"
+                    className="w-full accent-[#7C3AED]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Alinear en canvas</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Alinear en canvas</label>
                 <div className="flex gap-2">
-                  <button onClick={centerHorizontal} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Centrar horizontal</button>
-                  <button onClick={centerVertical} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Centrar vertical</button>
+                  <button onClick={centerHorizontal} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Centrar horizontal</button>
+                  <button onClick={centerVertical} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Centrar vertical</button>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs text-gray-500 block mb-1">Orden</label>
+                <label className="text-xs text-[#A1A1B5] block mb-1">Orden</label>
                 <div className="flex gap-2">
-                  <button onClick={bringToFront} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Traer al frente</button>
-                  <button onClick={sendToBack} className="flex-1 border rounded-md py-2 text-xs hover:bg-gray-50">Enviar al fondo</button>
+                  <button onClick={bringToFront} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Traer al frente</button>
+                  <button onClick={sendToBack} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Enviar al fondo</button>
                 </div>
               </div>
 
-              <div className="flex gap-2 pt-2 border-t">
-                <button onClick={toggleLock} className={`flex-1 border rounded-md py-2 text-sm ${selectedElement.locked ? 'bg-gray-800 text-white' : 'hover:bg-gray-50'}`}>
+              <div className="flex gap-2 pt-2 border-t border-[#30364A]">
+                <button onClick={toggleLock} className={`flex-1 border border-[#30364A] rounded-md py-2 text-sm ${selectedElement.locked ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>
                   {selectedElement.locked ? '🔒 Bloqueado' : '🔓 Bloquear'}
                 </button>
-                <button onClick={duplicateSelected} className="flex-1 border rounded-md py-2 text-sm hover:bg-gray-50">Duplicar</button>
+                <button onClick={duplicateSelected} className="flex-1 border border-[#30364A] rounded-md py-2 text-sm hover:bg-white/10">Duplicar</button>
                 <button onClick={deleteSelected} className="flex-1 bg-red-600 text-white rounded-md py-2 text-sm hover:bg-red-700">Eliminar</button>
               </div>
             </div>
           )}
+
         </div>
       </div>
 
-     {showTemplates && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowTemplates(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">Elige una plantilla</h2>
-              <button onClick={() => setShowTemplates(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {TEMPLATES.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  onClick={() => applyTemplate(tpl.id)}
-                  className="border rounded-lg overflow-hidden hover:shadow-md transition group"
-                >
-                  <div
-                    className="h-24 w-full"
-                    style={{ backgroundColor: tpl.previewColor }}
-                  />
-                  <div className="p-2 text-xs font-medium text-gray-700 group-hover:text-brand-600">
-                    {tpl.name}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* Barra inferior */}
+      <div className="h-10 shrink-0 flex items-center justify-between px-4 border-t text-xs" style={{ backgroundColor: T.bgAlt, borderColor: T.border, color: T.textMuted }}>
+        <span>Lienzo 800 × 600 px · {elements.length} elementos</span>
+        <div className="flex items-center gap-1">
+          <button onClick={zoomOut} className={`${ui.iconBtn} !h-7 !w-7`} title="Alejar"><Minus size={14} /></button>
+          <button onClick={() => setZoom(1)} className="px-2 h-7 rounded-md hover:bg-white/10 text-[#F8FAFC] min-w-[52px]" title="Restablecer zoom">{Math.round(zoom * 100)}%</button>
+          <button onClick={zoomIn} className={`${ui.iconBtn} !h-7 !w-7`} title="Acercar"><Plus size={14} /></button>
         </div>
-      )}
+      </div>
 
-      {showShapesModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowShapesModal(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-3xl w-full mx-4 max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">Elige una forma</h2>
-              <button onClick={() => setShowShapesModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
-            </div>
-            <div className="flex gap-2 mb-4 flex-wrap">
-              {SHAPE_CATEGORIES.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setShapeCategory(cat)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition ${
-                    shapeCategory === cat ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <div className="overflow-y-auto grid grid-cols-5 sm:grid-cols-6 gap-3 pr-1">
-              {SHAPES.filter((s) => s.category === shapeCategory).map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => addShapeIcon(s.id)}
-                  title={s.name}
-                  className="border border-gray-200 hover:border-brand-400 hover:bg-brand-50 rounded-lg p-3 flex items-center justify-center transition aspect-square"
-                >
-                  <ShapeThumbnail def={s} />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       {showAIModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => !generatingImage && setShowAIModal(false)}>
-          <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => !generatingImage && setShowAIModal(false)}>
+          <div className="rounded-xl p-6 max-w-lg w-full mx-4 border" style={{ backgroundColor: T.panel, borderColor: T.border }} onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold">✨ Generar imagen con IA</h2>
-              <button onClick={() => setShowAIModal(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <h2 className="text-lg font-bold text-[#F8FAFC]">✨ Generar imagen con IA</h2>
+              <button onClick={() => setShowAIModal(false)} className="text-[#A1A1B5] hover:text-white">✕</button>
             </div>
-            <p className="text-sm text-gray-500 mb-3">Describe la imagen que quieres crear:</p>
+            <p className="text-sm text-[#A1A1B5] mb-3">Describe la imagen que quieres crear:</p>
             <textarea
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
               placeholder="Ej: un tenis deportivo rojo sobre fondo blanco, estilo publicitario"
               rows={3}
-              className="w-full border rounded-md px-3 py-2 text-sm mb-4 resize-none"
+              className="w-full rounded-md px-3 py-2 text-sm mb-4 resize-none text-[#F8FAFC] placeholder-[#A1A1B5] bg-[#11131D] border border-[#30364A] outline-none focus:border-[#7C3AED]"
             />
             <button
               onClick={generateAIImage}
               disabled={generatingImage || !aiPrompt.trim()}
-              className="w-full bg-purple-600 text-white py-2.5 rounded-md text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition"
+              className={`${ui.primaryBtn} w-full !h-10`}
+              style={{ background: `linear-gradient(135deg, ${T.violet}, ${T.violetBright})` }}
             >
               {generatingImage ? 'Generando...' : 'Generar imagen'}
             </button>
