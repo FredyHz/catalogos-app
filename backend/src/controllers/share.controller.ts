@@ -1,7 +1,6 @@
 import { Response } from 'express';
-import fs from 'fs';
-import path from 'path';
 import { AuthRequest } from '../middleware/auth.middleware';
+import { uploadBuffer } from '../config/cloudinary';
 
 export async function generateShareImage(req: AuthRequest, res: Response) {
   const { image } = req.body;
@@ -15,22 +14,12 @@ export async function generateShareImage(req: AuthRequest, res: Response) {
     return res.status(400).json({ error: 'Formato de imagen inválido' });
   }
 
-  const ext = matches[1];
-  const base64Data = matches[2];
-  const buffer = Buffer.from(base64Data, 'base64');
-
-  const filename = `poster-${Date.now()}.${ext}`;
-  const uploadsDir = path.join(__dirname, '../../uploads');
-
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
+  try {
+    const buffer = Buffer.from(matches[2], 'base64');
+    const publicUrl = await uploadBuffer(buffer, 'stylefreds/compartidos');
+    return res.json({ url: publicUrl });
+  } catch (error) {
+    console.error('Error al subir imagen para compartir:', error);
+    return res.status(500).json({ error: 'No se pudo subir la imagen' });
   }
-
-  const filePath = path.join(uploadsDir, filename);
-  fs.writeFileSync(filePath, buffer);
-
-  const baseUrl = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
-  const publicUrl = `${baseUrl}/uploads/${filename}`;
-
-  return res.json({ url: publicUrl });
 }
