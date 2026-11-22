@@ -11,7 +11,7 @@ import QRCode from 'qrcode';
 import { notifyMascot } from '@/lib/mascotBus';
 import { SHAPES, SHAPE_CATEGORIES, ShapeDef } from '@/lib/shapes';
 import { T, ui } from '@/lib/editorTheme';
-import { LayoutTemplate, Shapes, Type, ImagePlus, Pencil, Palette, PaintBucket, QrCode, Search, Undo2, Redo2, Save, Download, Upload, Sparkles, Minus, Plus } from 'lucide-react';
+import { LayoutTemplate, Shapes, Type, ImagePlus, Pencil, Palette, PaintBucket, QrCode, Search, Undo2, Redo2, Save, Download, Upload, Sparkles, Minus, Plus, Layers, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, Trash2, RotateCcw, RotateCw, FlipHorizontal2, FlipVertical2, Maximize2, ImageUp } from 'lucide-react';
 
 
 export const AVAILABLE_FONTS = [
@@ -114,9 +114,18 @@ interface CanvasElement {
   shadowOffsetX?: number;
   shadowOffsetY?: number;
   locked?: boolean;
+  hidden?: boolean;
   flipX?: boolean;
   flipY?: boolean;
-  filterType?: 'none' | 'grayscale' | 'sepia';
+  filterType?: 'none' | 'grayscale' | 'sepia' | 'invert';
+  fit?: 'stretch' | 'fill';
+  zoom?: number;
+  offsetX?: number;
+  offsetY?: number;
+  saturation?: number;
+  hue?: number;
+  blur?: number;
+  pixelate?: number;
   brightness?: number;
   contrast?: number;
   points?: number[];
@@ -175,22 +184,52 @@ function ImageNode({ el, shapeRef, onSelect, onChange }: any) {
   const [img] = useImage(el.src, 'anonymous');
   const nodeRef = useRef<any>(null);
 
+  const w = el.width || 200;
+  const h = el.height || 200;
+
+  // Modo "llenar": la imagen cubre el marco y se recorta; zoom y mover cambian la parte visible
+  let cropProps: any = {};
+  if (el.fit === 'fill' && img) {
+    const nw = img.width || 1;
+    const nh = img.height || 1;
+    const zoom = Math.max(1, el.zoom ?? 1);
+    const scale = Math.max(w / nw, h / nh) * zoom;
+    const cw = w / scale;
+    const ch = h / scale;
+    const cx = Math.max(0, nw - cw) * (0.5 + (el.offsetX ?? 0) / 200);
+    const cy = Math.max(0, nh - ch) * (0.5 + (el.offsetY ?? 0) / 200);
+    cropProps = { cropX: cx, cropY: cy, cropWidth: cw, cropHeight: ch };
+  }
+
   useEffect(() => {
-    if (!nodeRef.current || !img) return;
+    const node = nodeRef.current;
+    if (!node || !img) return;
     const filters: any[] = [];
     if (el.filterType === 'grayscale') filters.push(Konva.Filters.Grayscale);
     if (el.filterType === 'sepia') filters.push(Konva.Filters.Sepia);
+    if (el.filterType === 'invert') filters.push(Konva.Filters.Invert);
     if (el.brightness) filters.push(Konva.Filters.Brighten);
     if (el.contrast) filters.push(Konva.Filters.Contrast);
-    nodeRef.current.cache();
-    nodeRef.current.filters(filters);
-    nodeRef.current.brightness((el.brightness || 0) / 100);
-    nodeRef.current.contrast(el.contrast || 0);
-    nodeRef.current.getLayer()?.batchDraw();
-  }, [img, el.filterType, el.brightness, el.contrast]);
+    if (el.saturation || el.hue) filters.push(Konva.Filters.HSL);
+    if (el.blur) filters.push(Konva.Filters.Blur);
+    if (el.pixelate) filters.push(Konva.Filters.Pixelate);
 
-  const w = el.width || 200;
-  const h = el.height || 200;
+    if (filters.length === 0) {
+      node.filters([]);
+      node.clearCache();
+      node.getLayer()?.batchDraw();
+      return;
+    }
+    node.cache();
+    node.filters(filters);
+    node.brightness((el.brightness || 0) / 100);
+    node.contrast(el.contrast || 0);
+    node.saturation((el.saturation || 0) / 100);
+    node.hue(el.hue || 0);
+    node.blurRadius(el.blur || 0);
+    node.pixelSize(Math.max(1, el.pixelate || 1));
+    node.getLayer()?.batchDraw();
+  }, [img, el.filterType, el.brightness, el.contrast, el.saturation, el.hue, el.blur, el.pixelate, w, h, el.fit, el.zoom, el.offsetX, el.offsetY]);
 
   return (
     <KonvaImage
@@ -199,6 +238,7 @@ function ImageNode({ el, shapeRef, onSelect, onChange }: any) {
         shapeRef(node);
       }}
       image={img}
+      {...cropProps}
       x={el.flipX ? el.x + w : el.x}
       y={el.flipY ? el.y + h : el.y}
       width={w}
@@ -480,6 +520,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
   const [isPublished, setIsPublished] = useState(false);
   const [history, setHistory] = useState<{ stack: CanvasElement[][]; step: number }>({ stack: [[]], step: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replaceInputRef = useRef<HTMLInputElement>(null);
   const stageRef = useRef<any>(null);
   const trRef = useRef<any>(null);
   const shapeRefs = useRef<Record<string, any>>({});
@@ -1116,12 +1157,110 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
     }
   };
 
+  const layerLabel = (el: CanvasElement) => {
+    if (el.type === 'text') return (el.text || 'Texto').slice(0, 22);
+    if (el.type === 'icon') return SHAPES.find((sh) => sh.id === el.shapeId)?.name || 'Forma';
+    const names: Record<string, string> = {
+      rect: 'Rectángulo', circle: 'Círculo', triangle: 'Triángulo', line: 'Línea',
+      arrow: 'Flecha', star: 'Estrella', image: 'Imagen', pen: 'Trazo',
+    };
+    return names[el.type] || 'Elemento';
+  };
+
+  const toggleHiddenById = (id: string) => {
+    setElementsWithHistory((prev) => prev.map((el) => (el.id === id ? { ...el, hidden: !el.hidden } : el)));
+    if (id === selectedId) setSelectedId(null);
+  };
+
+  const toggleLockById = (id: string) => {
+    setElementsWithHistory((prev) => prev.map((el) => (el.id === id ? { ...el, locked: !el.locked } : el)));
+  };
+
+  const deleteById = (id: string) => {
+    setElementsWithHistory((prev) => prev.filter((el) => el.id !== id));
+    if (id === selectedId) setSelectedId(null);
+  };
+
+  // dir = 1 sube la capa (hacia el frente), dir = -1 la baja
+  const moveLayer = (id: string, dir: 1 | -1) => {
+    setElementsWithHistory((prev) => {
+      const i = prev.findIndex((el) => el.id === id);
+      const j = i + dir;
+      if (i < 0 || j < 0 || j >= prev.length) return prev;
+      const next = [...prev];
+      [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  };
+
+  const replaceImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      patchSelected({ src, originalSrc: src });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  // Ajusta la altura del marco a la proporción real de la foto
+  const restoreAspect = () => {
+    const el = elements.find((x) => x.id === selectedId);
+    if (!el || el.type !== 'image' || !el.src) return;
+    const im = new window.Image();
+    im.crossOrigin = 'anonymous';
+    im.onload = () => patchSelected({ height: Math.round((el.width || 200) * im.height / im.width) });
+    im.src = el.src;
+  };
+
+  const setAspect = (ratio: number) => {
+    const el = elements.find((x) => x.id === selectedId);
+    if (!el) return;
+    patchSelected({ height: Math.round((el.width || 200) * ratio), fit: 'fill' });
+  };
+
+  const fillCanvas = () => patchSelected({ x: 0, y: 0, width: 800, height: 600, fit: 'fill', rotation: 0 });
+
+  const resetImage = () =>
+    patchSelected({
+      filterType: 'none', brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, pixelate: 0,
+      zoom: 1, offsetX: 0, offsetY: 0, flipX: false, flipY: false, rotation: 0,
+      cornerRadius: 0, strokeWidth: 0, opacity: 1, fit: 'stretch',
+    });
+
+  const rotateBy = (deg: number) => {
+    const el = elements.find((x) => x.id === selectedId);
+    if (!el) return;
+    let r = ((el.rotation || 0) + deg) % 360;
+    if (r > 180) r -= 360;
+    if (r < -180) r += 360;
+    patchSelected({ rotation: r });
+  };
+
+  const chip = (active: boolean) =>
+    `flex-1 h-8 border border-[#30364A] rounded-md text-xs transition ${active ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`;
+
+  const imgSlider = (label: string, value: number, min: number, max: number, step: number, onChange: (v: number) => void, unit = '') => (
+    <div>
+      <label className="text-xs text-[#A1A1B5] flex justify-between mb-1"><span>{label}</span><span>{Math.round(value * 100) / 100}{unit}</span></label>
+      <input
+        type="range" min={min} max={max} step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="w-full accent-[#7C3AED]"
+      />
+    </div>
+  );
+
   const railTabs: { id: string; label: string; icon: any }[] = [
     { id: 'plantillas', label: 'Plantillas', icon: LayoutTemplate },
     { id: 'elementos', label: 'Elementos', icon: Shapes },
     { id: 'texto', label: 'Texto', icon: Type },
     { id: 'imagenes', label: 'Imágenes', icon: ImagePlus },
     { id: 'dibujo', label: 'Dibujo', icon: Pencil },
+    { id: 'capas', label: 'Capas', icon: Layers },
     { id: 'marca', label: 'Marca', icon: Palette },
   ];
 
@@ -1142,7 +1281,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
       {/* Barra superior */}
       <div className="h-14 shrink-0 flex items-center justify-between px-4 gap-4 border-b" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
         <div className="flex items-center gap-3">
-          <Logo size="sm" />
+          <div className="px-2 py-1 rounded-lg" style={{ backgroundColor: 'rgba(255,255,255,0.92)' }}><Logo size="sm" /></div>
           <input
             type="text"
             value={title}
@@ -1427,6 +1566,38 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
             </div>
           )}
 
+          {activeTab === 'capas' && (
+            <div>
+              <h3 className={sectionTitle}>Capas ({elements.length})</h3>
+              {elements.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Aún no hay elementos</p>}
+              <div className="space-y-1.5">
+                {[...elements].reverse().map((el, idx, arr) => {
+                  const selected = el.id === selectedId;
+                  return (
+                    <div
+                      key={el.id}
+                      onClick={() => { if (!el.hidden) { setDrawMode(false); setSelectedId(el.id); } }}
+                      className="flex items-center gap-1 rounded-lg px-2 py-1.5 cursor-pointer border transition"
+                      style={{
+                        borderColor: selected ? T.violet : T.border,
+                        backgroundColor: selected ? 'rgba(124,58,237,0.15)' : 'transparent',
+                        opacity: el.hidden ? 0.5 : 1,
+                      }}
+                    >
+                      <span className="flex-1 text-xs truncate text-[#F8FAFC]">{layerLabel(el)}</span>
+                      <button title="Subir" disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronUp size={14} /></button>
+                      <button title="Bajar" disabled={idx === arr.length - 1} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, -1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronDown size={14} /></button>
+                      <button title={el.hidden ? 'Mostrar' : 'Ocultar'} onClick={(e) => { e.stopPropagation(); toggleHiddenById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                      <button title={el.locked ? 'Desbloquear' : 'Bloquear'} onClick={(e) => { e.stopPropagation(); toggleLockById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.locked ? <Lock size={14} /> : <Unlock size={14} />}</button>
+                      <button title="Eliminar" onClick={(e) => { e.stopPropagation(); deleteById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6 hover:!text-red-400`}><Trash2 size={14} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[11px] text-[#A1A1B5] mt-3">La capa de arriba es la que queda al frente.</p>
+            </div>
+          )}
+
           {activeTab === 'marca' && (
             <div className="space-y-2">
               <h3 className={sectionTitle}>Marca y página</h3>
@@ -1476,7 +1647,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
             >
                             <Layer>
                 <Rect x={0} y={0} width={800} height={600} {...getFillProps(canvasBg as any, 800, 600)} listening={false} />
-                {elements.map((el) => {
+                {elements.filter((el) => !el.hidden).map((el) => {
                   const commonShapeProps = {
                     opacity: el.opacity ?? 1,
                     stroke: el.strokeColor,
@@ -2075,48 +2246,91 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
               {selectedElement.type === 'image' && (
                 <>
                   <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1">Voltear</label>
-                    <div className="flex gap-2">
-                      <button onClick={toggleFlipX} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.flipX ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>↔ Horizontal</button>
-                      <button onClick={toggleFlipY} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.flipY ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>↕ Vertical</button>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Ajuste en el marco</label>
+                    <div className="flex gap-2 mb-2">
+                      <button onClick={() => patchSelected({ fit: 'stretch' })} className={chip(selectedElement.fit !== 'fill')}>Estirar</button>
+                      <button onClick={() => patchSelected({ fit: 'fill' })} className={chip(selectedElement.fit === 'fill')}>Llenar y recortar</button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={restoreAspect} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Proporción original</button>
+                      <button onClick={() => patchSelected({ height: selectedElement.width || 200 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Cuadrado</button>
+                      <button onClick={fillCanvas} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10 flex items-center justify-center gap-1"><Maximize2 size={12} /> Lienzo</button>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 mt-2">
+                      <button onClick={() => setAspect(1)} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">1:1</button>
+                      <button onClick={() => setAspect(3 / 4)} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">4:3</button>
+                      <button onClick={() => setAspect(9 / 16)} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">16:9</button>
+                      <button onClick={() => setAspect(16 / 9)} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">9:16</button>
+                    </div>
+                  </div>
+
+                  {selectedElement.fit === 'fill' && (
+                    <div className="space-y-3">
+                      {imgSlider('Zoom', selectedElement.zoom ?? 1, 1, 4, 0.05, (v) => patchSelected({ zoom: v }), 'x')}
+                      {imgSlider('Mover horizontal', selectedElement.offsetX ?? 0, -100, 100, 1, (v) => patchSelected({ offsetX: v }))}
+                      {imgSlider('Mover vertical', selectedElement.offsetY ?? 0, -100, 100, 1, (v) => patchSelected({ offsetY: v }))}
+                      <p className="text-[11px] text-[#A1A1B5]">Tip: en este modo, al arrastrar las esquinas del marco también recortas la foto.</p>
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Forma del marco</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      <button onClick={() => patchSelected({ cornerRadius: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Recto</button>
+                      <button onClick={() => patchSelected({ cornerRadius: 24 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Suave</button>
+                      <button onClick={() => patchSelected({ cornerRadius: Math.round(Math.min(selectedElement.width || 200, selectedElement.height || 200) / 2) })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Círculo</button>
+                      <button onClick={() => patchSelected({ cornerRadius: Math.round(Math.min(selectedElement.width || 200, selectedElement.height || 200) / 3) })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Píldora</button>
+                    </div>
+                    <p className="text-[11px] text-[#A1A1B5] mt-1">Para un círculo perfecto usa "Cuadrado" y luego "Círculo".</p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Girar y voltear</label>
+                    <div className="grid grid-cols-4 gap-2 mb-2">
+                      <button onClick={() => rotateBy(-90)} title="Girar 90° a la izquierda" className="h-9 border border-[#30364A] rounded-md hover:bg-white/10 flex items-center justify-center"><RotateCcw size={16} /></button>
+                      <button onClick={() => rotateBy(90)} title="Girar 90° a la derecha" className="h-9 border border-[#30364A] rounded-md hover:bg-white/10 flex items-center justify-center"><RotateCw size={16} /></button>
+                      <button onClick={toggleFlipX} title="Voltear horizontal" className={`h-9 border border-[#30364A] rounded-md flex items-center justify-center ${selectedElement.flipX ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}><FlipHorizontal2 size={16} /></button>
+                      <button onClick={toggleFlipY} title="Voltear vertical" className={`h-9 border border-[#30364A] rounded-md flex items-center justify-center ${selectedElement.flipY ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}><FlipVertical2 size={16} /></button>
+                    </div>
+                    {imgSlider('Ángulo', Math.round(selectedElement.rotation || 0), -180, 180, 1, (v) => patchSelected({ rotation: v }), '°')}
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-[#A1A1B5] block mb-1">Ajustes rápidos</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      <button onClick={() => patchSelected({ filterType: 'none', saturation: 40, contrast: 15, brightness: 0, hue: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Vívido</button>
+                      <button onClick={() => patchSelected({ filterType: 'none', contrast: 40, brightness: -10, saturation: -20, hue: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Dramático</button>
+                      <button onClick={() => patchSelected({ filterType: 'none', brightness: 10, contrast: -10, saturation: 10, hue: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Suave</button>
+                      <button onClick={() => patchSelected({ filterType: 'sepia', contrast: 10, brightness: 0, saturation: 0, hue: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Vintage</button>
+                      <button onClick={() => patchSelected({ filterType: 'grayscale', contrast: 30, brightness: 0, saturation: 0, hue: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Noir</button>
+                      <button onClick={() => patchSelected({ filterType: 'none', brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, pixelate: 0 })} className="h-8 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Ninguno</button>
                     </div>
                   </div>
 
                   <div>
                     <label className="text-xs text-[#A1A1B5] block mb-1">Filtro</label>
-                    <div className="flex gap-2">
-                      <button onClick={() => applyImageFilter('none')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${(!selectedElement.filterType || selectedElement.filterType === 'none') ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>Normal</button>
-                      <button onClick={() => applyImageFilter('grayscale')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.filterType === 'grayscale' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>B/N</button>
-                      <button onClick={() => applyImageFilter('sepia')} className={`flex-1 h-9 border border-[#30364A] rounded-md text-xs ${selectedElement.filterType === 'sepia' ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>Sepia</button>
+                    <div className="grid grid-cols-4 gap-2">
+                      <button onClick={() => patchSelected({ filterType: 'none' })} className={chip(!selectedElement.filterType || selectedElement.filterType === 'none')}>Normal</button>
+                      <button onClick={() => patchSelected({ filterType: 'grayscale' })} className={chip(selectedElement.filterType === 'grayscale')}>B/N</button>
+                      <button onClick={() => patchSelected({ filterType: 'sepia' })} className={chip(selectedElement.filterType === 'sepia')}>Sepia</button>
+                      <button onClick={() => patchSelected({ filterType: 'invert' })} className={chip(selectedElement.filterType === 'invert')}>Invertir</button>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1">Brillo</label>
-                    <input
-                      type="range" min="-100" max="100"
-                      value={selectedElement.brightness || 0}
-                      onChange={(e) => changeBrightness(parseFloat(e.target.value))}
-                      className="w-full accent-[#7C3AED]"
-                    />
+                  <div className="space-y-3">
+                    {imgSlider('Brillo', selectedElement.brightness || 0, -100, 100, 1, (v) => patchSelected({ brightness: v }))}
+                    {imgSlider('Contraste', selectedElement.contrast || 0, -100, 100, 1, (v) => patchSelected({ contrast: v }))}
+                    {imgSlider('Saturación', selectedElement.saturation || 0, -100, 100, 1, (v) => patchSelected({ saturation: v }))}
+                    {imgSlider('Tono', selectedElement.hue || 0, 0, 359, 1, (v) => patchSelected({ hue: v }), '°')}
+                    {imgSlider('Desenfoque', selectedElement.blur || 0, 0, 40, 1, (v) => patchSelected({ blur: v }))}
+                    {imgSlider('Pixelado', selectedElement.pixelate || 0, 0, 30, 1, (v) => patchSelected({ pixelate: v }))}
                   </div>
 
-                  <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1">Contraste</label>
-                    <input
-                      type="range" min="-100" max="100"
-                      value={selectedElement.contrast || 0}
-                      onChange={(e) => changeContrast(parseFloat(e.target.value))}
-                      className="w-full accent-[#7C3AED]"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => replaceInputRef.current?.click()} className="h-9 border border-[#30364A] rounded-md text-xs hover:bg-white/10 flex items-center justify-center gap-1.5"><ImageUp size={14} /> Reemplazar</button>
+                    <button onClick={resetImage} className="h-9 border border-[#30364A] rounded-md text-xs hover:bg-white/10">Restablecer</button>
                   </div>
-
-                  <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1">Recorte</label>
-                    <button onClick={smartSquareCrop} className="w-full h-9 border border-[#30364A] rounded-md text-xs hover:bg-white/10">
-                      Recortar a cuadrado
-                    </button>
-                  </div>
+                  <input type="file" accept="image/*" ref={replaceInputRef} onChange={replaceImage} className="hidden" />
                 </>
               )}
               
@@ -2125,7 +2339,7 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                 <div>
                   <label className="text-xs text-[#A1A1B5] block mb-1">Bordes redondeados</label>
                   <input
-                    type="range" min="0" max="50"
+                    type="range" min="0" max={Math.max(50, Math.round(Math.min(selectedElement.width || 100, selectedElement.height || 100) / 2))}
                     value={selectedElement.cornerRadius || 0}
                     onChange={(e) => changeCornerRadius(parseFloat(e.target.value))}
                     className="w-full accent-[#7C3AED]"
