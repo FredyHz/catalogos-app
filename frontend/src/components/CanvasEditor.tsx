@@ -11,7 +11,7 @@ import QRCode from 'qrcode';
 import { notifyMascot } from '@/lib/mascotBus';
 import { SHAPES, SHAPE_CATEGORIES, ShapeDef } from '@/lib/shapes';
 import { T, ui } from '@/lib/editorTheme';
-import { LayoutTemplate, Shapes, Type, ImagePlus, Pencil, Palette, PaintBucket, QrCode, Search, Undo2, Redo2, Save, Download, Upload, Sparkles, Minus, Plus, Layers, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, Trash2, RotateCcw, RotateCw, FlipHorizontal2, FlipVertical2, Maximize2, ImageUp } from 'lucide-react';
+import { LayoutTemplate, Shapes, Type, ImagePlus, Pencil, Palette, PaintBucket, QrCode, Search, Undo2, Redo2, Save, Download, Upload, Sparkles, Minus, Plus, Layers, Eye, EyeOff, Lock, Unlock, ChevronUp, ChevronDown, Trash2, RotateCcw, RotateCw, FlipHorizontal2, FlipVertical2, Maximize2, ImageUp, Square, Circle, Triangle, ArrowRight, Star as StarIcon, Brush, Eraser, Highlighter, Feather, Wind, Droplet, Crown, Gem, Moon, Sun, Zap, Waves, Clock, Copy, MousePointer2, Hexagon, PenTool, Pen, Grid3x3, Contrast, X as XIcon, PanelLeftClose, AlignCenterHorizontal, AlignCenterVertical, ChevronsUp, ChevronsDown, Bold, Underline, Strikethrough, CaseUpper, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
 
 
 export const AVAILABLE_FONTS = [
@@ -83,7 +83,7 @@ const TEXT_STYLES = {
 };
 
 type ElementType = 'rect' | 'circle' | 'triangle' | 'line' | 'arrow' | 'star' | 'text' | 'image' | 'pen' | 'icon';
-type BrushStyle = 'normal' | 'marker' | 'pixel' | 'calligraphy' | 'sprite';
+type BrushStyle = 'normal' | 'brush' | 'marker' | 'pixel' | 'calligraphy' | 'sprite' | 'airbrush' | 'charcoal' | 'watercolor' | 'chalk' | 'ink' | 'straight';
 
 interface CanvasElement {
   id: string;
@@ -131,6 +131,7 @@ interface CanvasElement {
   points?: number[];
   brushStyle?: BrushStyle;
   isEraser?: boolean;
+  tension?: number;
   shapeId?: string;
     fillType?: 'solid' | 'linear' | 'radial';
   gradientStart?: string;
@@ -507,6 +508,68 @@ function ShapeIconNode({ el, shapeRef, onSelect, onChange }: any) {
     />
   );
 }
+
+// ===== Menús de herramientas =====
+type ToolDef = {
+  id: string;
+  label: string;
+  icon?: any;
+  render?: () => React.ReactNode;
+  run: () => void;
+  enabled?: boolean;
+  active?: boolean;
+  hint?: string;
+};
+type GroupDef = { id: string; title: string; layout?: 'list' | 'grid'; tools: ToolDef[] };
+
+const normText = (t: string) => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+function ToolGroup({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border" style={{ borderColor: T.border, backgroundColor: 'rgba(255,255,255,0.02)' }}>
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-[#A1A1B5] hover:text-white transition"
+      >
+        <span>{title}</span>
+        <ChevronDown size={14} style={{ transform: open ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 200ms ease' }} />
+      </button>
+      <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 200ms ease' }}>
+        <div style={{ overflow: 'hidden' }}>
+          <div className="px-2 pb-2">{children}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Collapsible({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <ToolGroup title={title} open={open} onToggle={() => setOpen((v) => !v)}>
+      {children}
+    </ToolGroup>
+  );
+}
+
+// Ajustes extra de pincel (sombra, línea punteada...) según el estilo
+function brushExtras(el: any): any {
+  if (el.isEraser) return {};
+  const sw = el.strokeWidth || 6;
+  switch (el.brushStyle) {
+    case 'airbrush':
+      return { shadowColor: el.fill, shadowBlur: sw * 1.6, shadowOpacity: 0.9 };
+    case 'charcoal':
+      return { shadowColor: el.fill, shadowBlur: 3, shadowOpacity: 0.8, dash: [sw * 0.15 + 1, sw * 0.12 + 1] };
+    case 'watercolor':
+      return { shadowColor: el.fill, shadowBlur: sw * 0.9, shadowOpacity: 0.6 };
+    case 'chalk':
+      return { dash: [sw * 0.2 + 1, sw * 0.5 + 1] };
+    default:
+      return {};
+  }
+}
+const BRUSH_OPACITY: Record<string, number> = { marker: 0.4, airbrush: 0.55, watercolor: 0.3, charcoal: 0.75, chalk: 0.85 };
 
 export default function CanvasEditor({ posterId, defaultType }: { posterId?: string | null; defaultType?: string }) {
   const [elements, setElements] = useState<CanvasElement[]>([]);
@@ -888,7 +951,8 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
       strokeWidth: brushSize,
       brushStyle,
       isEraser: isErasing,
-      opacity: brushStyle === 'marker' ? 0.4 : 1,
+      opacity: Math.round((BRUSH_OPACITY[brushStyle] ?? 1) * brushOpacity * 100) / 100,
+      tension: brushStyle === 'pixel' || brushStyle === 'straight' ? 0 : (brushSmooth / 100) * 0.8,
       rotation: 0,
     };
     setElements((prev) => [...prev, newStroke]);
@@ -907,7 +971,9 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
     }
     setElements((prev) =>
       prev.map((el) =>
-        el.id === currentStrokeId ? { ...el, points: [...(el.points || []), x, y] } : el
+        el.id === currentStrokeId
+          ? { ...el, points: brushStyle === 'straight' ? [(el.points || [])[0], (el.points || [])[1], x, y] : [...(el.points || []), x, y] }
+          : el
       )
     );
   };
@@ -1060,7 +1126,42 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentStrokeId, setCurrentStrokeId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('plantillas');
-  const [searchQ, setSearchQ] = useState('');
+  const [panelOpen, setPanelOpen] = useState(true);
+  const [toolQuery, setToolQuery] = useState('');
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [favorites, setFavorites] = useState<string[]>([]);
+  const [recents, setRecents] = useState<string[]>([]);
+  const storageReady = useRef(false);
+  const panelScrollRef = useRef<HTMLDivElement>(null);
+  const scrollMap = useRef<Record<string, number>>({});
+  const [brushOpacity, setBrushOpacity] = useState(1);
+  const [brushSmooth, setBrushSmooth] = useState(50);
+
+  useEffect(() => {
+    try {
+      const g = localStorage.getItem('sf-open-groups');
+      const f = localStorage.getItem('sf-favorites');
+      const r = localStorage.getItem('sf-recents');
+      if (g) setOpenGroups(JSON.parse(g));
+      if (f) setFavorites(JSON.parse(f));
+      if (r) setRecents(JSON.parse(r));
+    } catch {}
+    storageReady.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady.current) return;
+    try {
+      localStorage.setItem('sf-open-groups', JSON.stringify(openGroups));
+      localStorage.setItem('sf-favorites', JSON.stringify(favorites));
+      localStorage.setItem('sf-recents', JSON.stringify(recents));
+    } catch {}
+  }, [openGroups, favorites, recents]);
+
+  useEffect(() => {
+    const el = panelScrollRef.current;
+    if (el) el.scrollTop = scrollMap.current[activeTab] || 0;
+  }, [activeTab, panelOpen]);
   const [zoom, setZoom] = useState(1);
 
   const applyTemplate = (templateId: string) => {
@@ -1260,18 +1361,245 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
     { id: 'texto', label: 'Texto', icon: Type },
     { id: 'imagenes', label: 'Imágenes', icon: ImagePlus },
     { id: 'dibujo', label: 'Dibujo', icon: Pencil },
+    { id: 'seleccion', label: 'Selección', icon: MousePointer2 },
+    { id: 'formas', label: 'Formas', icon: Hexagon },
+    { id: 'vectorial', label: 'Vectorial', icon: PenTool },
+    { id: 'efectos', label: 'Efectos', icon: Sparkles },
     { id: 'capas', label: 'Capas', icon: Layers },
     { id: 'marca', label: 'Marca', icon: Palette },
   ];
+  const currentTab = railTabs.find((t) => t.id === activeTab) || railTabs[0];
 
-  const q = searchQ.trim().toLowerCase();
-  const filteredTemplates = TEMPLATES.filter((t) => !q || t.name.toLowerCase().includes(q));
-  const filteredShapes = SHAPES.filter((s) => (q ? s.name.toLowerCase().includes(q) : s.category === shapeCategory));
+  // ----- Estado de la selección (habilita o apaga herramientas) -----
+  const sel = selectedElement;
+  const hasSel = !!sel;
+  const isFillable = !!sel && ['rect', 'circle', 'triangle', 'star', 'icon', 'text'].includes(sel.type);
+  const isEffectable = !!sel && ['rect', 'circle', 'triangle', 'star', 'icon', 'text', 'image'].includes(sel.type);
+  const isImg = sel?.type === 'image';
+  const isTxt = sel?.type === 'text';
+  const glowColor = (sel ? (sel.fillType && sel.fillType !== 'solid' ? sel.gradientStart : sel.fill) : '') || '#7C3AED';
+  const minSide = Math.round(Math.min(sel?.width || 200, sel?.height || 200) / 2);
 
-  const panelBtn =
-    'w-full text-left px-3 py-2.5 rounded-lg border border-[#30364A] text-sm font-medium text-[#F8FAFC] transition hover:border-[#7C3AED] hover:bg-white/5';
-  const quickShape =
-    'border border-[#30364A] hover:border-[#7C3AED] hover:bg-white/5 rounded-lg p-3 flex items-center justify-center transition';
+  const selectBrush = (style: BrushStyle) => { setDrawMode(true); setSelectedId(null); setBrushStyle(style); setIsErasing(false); };
+  const selectEraser = () => { setDrawMode(true); setSelectedId(null); setIsErasing(true); };
+
+  const brush = (id: BrushStyle, label: string, icon: any): ToolDef => ({
+    id: `dibujo.${id}`, label, icon, run: () => selectBrush(id), active: drawMode && !isErasing && brushStyle === id,
+  });
+  const fx = (id: string, label: string, icon: any, ok: boolean, patch: Partial<CanvasElement>): ToolDef => ({
+    id: `efectos.${id}`, label, icon, enabled: ok, run: () => patchSelected(patch),
+  });
+  const act = (id: string, label: string, icon: any, ok: boolean, run: () => void, active = false): ToolDef => ({
+    id, label, icon, enabled: ok, run, active,
+  });
+
+  const tRect = act('elementos.rect', 'Rectángulo', Square, true, addRect);
+  const tCircle = act('elementos.circle', 'Círculo', Circle, true, addCircle);
+  const tTriangle = act('elementos.triangle', 'Triángulo', Triangle, true, addTriangle);
+  const tLine = act('elementos.line', 'Línea', Minus, true, addLine);
+  const tArrow = act('elementos.arrow', 'Flecha', ArrowRight, true, addArrow);
+  const tStar = act('elementos.star', 'Estrella', StarIcon, true, addStar);
+  const tStraight = { ...brush('straight', 'Línea recta (dibujar)', Minus), hint: 'Arrastra en el lienzo para trazar una línea recta' };
+
+  const CATS: Record<string, GroupDef[]> = {
+    elementos: [
+      { id: 'basicas', title: 'Formas básicas', tools: [tRect, tCircle, tTriangle, tLine, tArrow, tStar] },
+    ],
+    texto: [
+      { id: 'anadir', title: 'Añadir texto', tools: [
+        act('texto.titulo', 'Título', Type, true, () => addText('titulo')),
+        act('texto.subtitulo', 'Subtítulo', Type, true, () => addText('subtitulo')),
+        act('texto.normal', 'Texto normal', Type, true, () => addText('normal')),
+      ] },
+      { id: 'formato', title: 'Formato (texto seleccionado)', tools: [
+        act('texto.negrita', 'Negrita', Bold, isTxt, toggleBold, sel?.fontStyle === 'bold'),
+        act('texto.subrayado', 'Subrayado', Underline, isTxt, toggleUnderline, sel?.textDecoration === 'underline'),
+        act('texto.tachado', 'Tachado', Strikethrough, isTxt, toggleStrikethrough, sel?.textDecoration === 'line-through'),
+        act('texto.mayusculas', 'Mayúsculas', CaseUpper, isTxt, toggleUppercase, !!sel?.uppercase),
+      ] },
+      { id: 'alineacion', title: 'Alineación', tools: [
+        act('texto.izq', 'Alinear a la izquierda', AlignLeft, isTxt, () => changeAlign('left'), sel?.align === 'left'),
+        act('texto.centro', 'Centrar texto', AlignCenter, isTxt, () => changeAlign('center'), sel?.align === 'center'),
+        act('texto.der', 'Alinear a la derecha', AlignRight, isTxt, () => changeAlign('right'), sel?.align === 'right'),
+      ] },
+    ],
+    imagenes: [
+      { id: 'anadir', title: 'Añadir', tools: [
+        act('imagenes.subir', 'Subir imagen', Upload, true, () => fileInputRef.current?.click()),
+        act('imagenes.ia', 'Generar con IA', Sparkles, true, () => setShowAIModal(true)),
+      ] },
+      { id: 'marco', title: 'Marco y forma', tools: [
+        act('imagenes.recto', 'Marco recto', Square, isImg, () => patchSelected({ cornerRadius: 0 })),
+        act('imagenes.suave', 'Esquinas suaves', Square, isImg, () => patchSelected({ cornerRadius: 24 })),
+        act('imagenes.circulo', 'Marco circular', Circle, isImg, () => patchSelected({ cornerRadius: minSide })),
+        act('imagenes.cuadrado', 'Marco cuadrado', Square, isImg, () => patchSelected({ height: sel?.width || 200, fit: 'fill' })),
+        act('imagenes.proporcion', 'Proporción original', Maximize2, isImg, restoreAspect),
+        act('imagenes.lienzo', 'Llenar el lienzo', Maximize2, isImg, fillCanvas),
+      ] },
+      { id: 'girar', title: 'Girar y voltear', tools: [
+        act('imagenes.girarizq', 'Girar 90° a la izquierda', RotateCcw, isImg, () => rotateBy(-90)),
+        act('imagenes.girarder', 'Girar 90° a la derecha', RotateCw, isImg, () => rotateBy(90)),
+        act('imagenes.volth', 'Voltear horizontal', FlipHorizontal2, isImg, toggleFlipX, !!sel?.flipX),
+        act('imagenes.voltv', 'Voltear vertical', FlipVertical2, isImg, toggleFlipY, !!sel?.flipY),
+      ] },
+    ],
+    dibujo: [
+      { id: 'basicas', title: 'Herramientas básicas', tools: [
+        brush('normal', 'Lápiz', Pencil),
+        brush('brush', 'Pincel', Brush),
+        brush('marker', 'Marcador', Highlighter),
+        brush('calligraphy', 'Plumín', Feather),
+        brush('airbrush', 'Aerógrafo', Wind),
+        brush('charcoal', 'Carboncillo', Pen),
+        brush('watercolor', 'Acuarela', Droplet),
+        brush('chalk', 'Tiza', Square),
+        brush('ink', 'Tinta', PenTool),
+        { id: 'dibujo.borrador', label: 'Borrador', icon: Eraser, run: selectEraser, active: drawMode && isErasing },
+      ] },
+      { id: 'especiales', title: 'Pinceles especiales', tools: [
+        brush('pixel', 'Pincel de píxeles', Grid3x3),
+        brush('sprite', 'Pincel de estrellas', StarIcon),
+      ] },
+      { id: 'trazo', title: 'Herramientas de trazo', tools: [tStraight] },
+    ],
+    seleccion: [
+      { id: 'acciones', title: 'Acciones', tools: [
+        act('seleccion.duplicar', 'Duplicar', Copy, hasSel, duplicateSelected),
+        act('seleccion.eliminar', 'Eliminar', Trash2, hasSel, deleteSelected),
+        act('seleccion.bloquear', sel?.locked ? 'Desbloquear' : 'Bloquear', sel?.locked ? Unlock : Lock, hasSel, toggleLock, !!sel?.locked),
+        act('seleccion.quitar', 'Quitar selección', MousePointer2, true, () => setSelectedId(null)),
+      ] },
+      { id: 'orden', title: 'Orden y alineación', tools: [
+        act('seleccion.frente', 'Traer al frente', ChevronsUp, hasSel, bringToFront),
+        act('seleccion.fondo', 'Enviar al fondo', ChevronsDown, hasSel, sendToBack),
+        act('seleccion.centroh', 'Centrar horizontal', AlignCenterHorizontal, hasSel, centerHorizontal),
+        act('seleccion.centrov', 'Centrar vertical', AlignCenterVertical, hasSel, centerVertical),
+      ] },
+    ],
+    formas: SHAPE_CATEGORIES.map((cat) => ({
+      id: `cat-${cat}`,
+      title: cat,
+      layout: 'grid' as const,
+      tools: SHAPES.filter((sh) => sh.category === cat).map((sh) => ({
+        id: `formas.${sh.id}`,
+        label: sh.name,
+        render: () => <ShapeThumbnail def={sh} />,
+        run: () => addShapeIcon(sh.id),
+      })),
+    })),
+    vectorial: [
+      { id: 'lineas', title: 'Líneas y trazos', tools: [tLine, tArrow, tStraight] },
+    ],
+    efectos: [
+      { id: 'sombras', title: 'Sombras', tools: [
+        fx('sombra', 'Sombra exterior', Droplet, isEffectable, { shadowColor: '#000000', shadowBlur: 18, shadowOffsetX: 0, shadowOffsetY: 8 }),
+        fx('paralela', 'Sombra paralela', Copy, isEffectable, { shadowColor: '#000000', shadowBlur: 0, shadowOffsetX: 10, shadowOffsetY: 10 }),
+        fx('sinsombra', 'Quitar sombra', XIcon, isEffectable, { shadowBlur: 0, shadowOffsetX: 0, shadowOffsetY: 0 }),
+      ] },
+      { id: 'luz', title: 'Iluminación', tools: [
+        fx('resplandor', 'Resplandor exterior', Sun, isEffectable, { shadowColor: glowColor, shadowBlur: 30, shadowOffsetX: 0, shadowOffsetY: 0 }),
+        fx('neon', 'Neón', Zap, isEffectable, { strokeColor: '#FFFFFF', strokeWidth: 2, shadowColor: glowColor, shadowBlur: 35, shadowOffsetX: 0, shadowOffsetY: 0 }),
+      ] },
+      { id: 'estilos', title: 'Estilos', tools: [
+        fx('dorado', 'Dorado', Crown, isFillable, { fillType: 'linear', gradientStart: '#FDE68A', gradientEnd: '#B45309', gradientAngle: 90 }),
+        fx('plateado', 'Plateado', Moon, isFillable, { fillType: 'linear', gradientStart: '#F3F4F6', gradientEnd: '#6B7280', gradientAngle: 90 }),
+        fx('metalico', 'Metálico', Gem, isFillable, { fillType: 'linear', gradientStart: '#E5E7EB', gradientEnd: '#374151', gradientAngle: 45 }),
+        fx('cristal', 'Cristal', Sparkles, isFillable, { fillType: 'linear', gradientStart: '#FFFFFF', gradientEnd: '#67E8F9', gradientAngle: 45, opacity: 0.6, strokeColor: '#FFFFFF', strokeWidth: 2 }),
+      ] },
+      { id: 'filtros', title: 'Filtros (imagen)', tools: [
+        fx('desenfoque', 'Desenfoque', Waves, isImg, { blur: 6 }),
+        fx('vivido', 'Vívido', Sun, isImg, { filterType: 'none', saturation: 40, contrast: 15 }),
+        fx('vintage', 'Vintage', Clock, isImg, { filterType: 'sepia', contrast: 10 }),
+        fx('noir', 'Noir', Moon, isImg, { filterType: 'grayscale', contrast: 30 }),
+        fx('invertir', 'Invertir colores', Contrast, isImg, { filterType: 'invert' }),
+        fx('pixelado', 'Pixelado', Grid3x3, isImg, { pixelate: 8 }),
+        fx('sinfiltro', 'Quitar filtros', XIcon, isImg, { filterType: 'none', brightness: 0, contrast: 0, saturation: 0, hue: 0, blur: 0, pixelate: 0 }),
+      ] },
+    ],
+    marca: [
+      { id: 'identidad', title: 'Identidad', tools: [act('marca.aplicar', 'Aplicar mi marca', Palette, true, applyMyBrand)] },
+      { id: 'pagina', title: 'Página', tools: [act('marca.fondo', 'Fondo de página', PaintBucket, true, () => { setSelectedId(null); setShowBgPanel(true); })] },
+      { id: 'codigos', title: 'Códigos', tools: [act('marca.qr', 'Insertar código QR', QrCode, true, insertQRCode)] },
+    ],
+  };
+
+  // Índice de todas las herramientas (para buscar, favoritos y recientes)
+  const toolIndex: Record<string, { tool: ToolDef; cat: string }> = {};
+  railTabs.forEach((rt) => (CATS[rt.id] || []).forEach((g) => g.tools.forEach((t) => { if (!toolIndex[t.id]) toolIndex[t.id] = { tool: t, cat: rt.label }; })));
+
+  const tq = normText(toolQuery.trim());
+  const searchResults = tq ? Object.values(toolIndex).filter((x) => normText(x.tool.label).includes(tq)) : [];
+  const filteredTemplates = TEMPLATES.filter((t) => !tq || normText(t.name).includes(tq));
+
+  const isGroupOpen = (key: string, def: boolean) => openGroups[key] ?? def;
+  const toggleGroup = (key: string, def: boolean) => setOpenGroups((p) => ({ ...p, [key]: !(p[key] ?? def) }));
+  const toggleFav = (id: string) => setFavorites((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const runTool = (t: ToolDef) => {
+    if (t.enabled === false) return;
+    if (!t.id.startsWith('dibujo.') && drawMode) setDrawMode(false);
+    t.run();
+    setRecents((p) => [t.id, ...p.filter((x) => x !== t.id)].slice(0, 6));
+  };
+
+  const renderTool = (t: ToolDef, grid = false) => {
+    const disabled = t.enabled === false;
+    const Icon = t.icon;
+    if (grid) {
+      return (
+        <button
+          key={t.id}
+          title={t.label}
+          onClick={() => runTool(t)}
+          className="aspect-square rounded-lg border flex items-center justify-center transition hover:bg-white/5"
+          style={{ borderColor: t.active ? T.violet : T.border, backgroundColor: t.active ? 'rgba(124,58,237,0.25)' : 'transparent' }}
+        >
+          {t.render ? t.render() : Icon ? <Icon size={16} /> : null}
+        </button>
+      );
+    }
+    const isFav = favorites.includes(t.id);
+    return (
+      <div
+        key={t.id}
+        role="button"
+        title={disabled ? `${t.label} (selecciona un elemento compatible)` : t.hint || t.label}
+        onClick={() => runTool(t)}
+        className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 cursor-pointer transition hover:bg-white/5"
+        style={{
+          opacity: disabled ? 0.4 : 1,
+          backgroundColor: t.active ? 'rgba(124,58,237,0.25)' : undefined,
+          boxShadow: t.active ? `inset 0 0 0 1px ${T.violet}` : 'none',
+        }}
+      >
+        <span className="w-5 flex justify-center text-[#C4B5FD]">{t.render ? t.render() : Icon ? <Icon size={16} /> : null}</span>
+        <span className="flex-1 text-[13px] text-[#F8FAFC] truncate">{t.label}</span>
+        <button
+          title={isFav ? 'Quitar de accesos rápidos' : 'Fijar en accesos rápidos'}
+          onClick={(e) => { e.stopPropagation(); toggleFav(t.id); }}
+          className={`transition ${isFav ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
+        >
+          <StarIcon size={14} fill={isFav ? '#FBBF24' : 'none'} color={isFav ? '#FBBF24' : '#A1A1B5'} />
+        </button>
+      </div>
+    );
+  };
+
+  const renderGroup = (g: GroupDef, ci: number, tabId: string) => {
+    const key = `${tabId}.${g.id}`;
+    return (
+      <ToolGroup key={key} title={g.title} open={isGroupOpen(key, ci === 0)} onToggle={() => toggleGroup(key, ci === 0)}>
+        {g.layout === 'grid' ? (
+          <div className="grid grid-cols-5 gap-1.5">{g.tools.map((t) => renderTool(t, true))}</div>
+        ) : (
+          <div className="space-y-0.5">{g.tools.map((t) => renderTool(t))}</div>
+        )}
+      </ToolGroup>
+    );
+  };
+
+  const favTools = favorites.map((id) => toolIndex[id]?.tool).filter(Boolean) as ToolDef[];
+  const recentTools = recents.map((id) => toolIndex[id]?.tool).filter(Boolean) as ToolDef[];
+
   const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-[#A1A1B5] mb-2';
   const zoomIn = () => setZoom((z) => Math.min(2, Math.round((z + 0.1) * 10) / 10));
   const zoomOut = () => setZoom((z) => Math.max(0.3, Math.round((z - 0.1) * 10) / 10));
@@ -1341,280 +1669,185 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
 
       <div className="flex flex-1 min-h-0">
         {/* Barra de categorías */}
-        <div className="w-[76px] shrink-0 flex flex-col items-center py-3 gap-1 border-r" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
+        <div className="w-[68px] shrink-0 overflow-y-auto flex flex-col items-center py-2 gap-0.5 border-r" style={{ backgroundColor: T.bgAlt, borderColor: T.border }}>
           {railTabs.map((t) => {
             const Icon = t.icon;
-            const active = activeTab === t.id;
+            const active = activeTab === t.id && panelOpen;
             return (
               <button
                 key={t.id}
-                onClick={() => { setActiveTab(t.id); setSearchQ(''); }}
-                className="w-16 py-2.5 rounded-xl flex flex-col items-center gap-1 text-[11px] font-medium transition"
+                title={t.label}
+                onClick={() => {
+                  if (t.id !== 'dibujo' && drawMode) setDrawMode(false);
+                  if (activeTab === t.id && panelOpen) {
+                    setPanelOpen(false);
+                  } else {
+                    setActiveTab(t.id);
+                    setPanelOpen(true);
+                  }
+                }}
+                className="w-14 py-2 rounded-xl flex flex-col items-center gap-0.5 text-[10px] font-medium transition"
                 style={{
                   backgroundColor: active ? 'rgba(124,58,237,0.2)' : 'transparent',
                   color: active ? '#FFFFFF' : T.textMuted,
                   boxShadow: active ? `inset 0 0 0 1px ${T.violet}` : 'none',
                 }}
               >
-                <Icon size={20} />
+                <Icon size={18} />
                 {t.label}
               </button>
             );
           })}
         </div>
 
-        {/* Panel secundario */}
-        <div className="w-72 shrink-0 overflow-y-auto p-4 space-y-4 border-r" style={{ backgroundColor: T.panel, borderColor: T.border }}>
-          {(activeTab === 'plantillas' || activeTab === 'elementos') && (
-            <div className="relative">
-              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#A1A1B5]" />
+        {/* Panel de herramientas */}
+        {panelOpen && (
+          <div className="w-72 shrink-0 flex flex-col border-r" style={{ backgroundColor: T.panel, borderColor: T.border }}>
+            <div className="flex items-center justify-between px-4 pt-3 pb-2">
+              <h2 className="text-sm font-semibold text-[#F8FAFC]">{currentTab.label}</h2>
+              <button onClick={() => setPanelOpen(false)} title="Contraer panel" className={`${ui.iconBtn} !h-7 !w-7`}>
+                <PanelLeftClose size={16} />
+              </button>
+            </div>
+
+            <div className="px-4 pb-3 relative">
+              <Search size={15} className="absolute left-7 top-1/2 -translate-y-1/2 text-[#A1A1B5] pointer-events-none" style={{ marginTop: -6 }} />
               <input
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                placeholder={activeTab === 'plantillas' ? 'Buscar plantillas' : 'Buscar formas'}
+                value={toolQuery}
+                onChange={(e) => setToolQuery(e.target.value)}
+                placeholder={activeTab === 'plantillas' ? 'Buscar plantillas' : 'Buscar herramienta...'}
                 className={`${ui.input} w-full pl-9`}
               />
             </div>
-          )}
 
-          {activeTab === 'plantillas' && (
-            <div>
-              <h3 className={sectionTitle}>Plantillas</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {filteredTemplates.map((tpl) => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => applyTemplate(tpl.id)}
-                    className="rounded-lg overflow-hidden border border-[#30364A] hover:border-[#7C3AED] transition text-left"
-                  >
-                    <div className="h-20 w-full" style={{ backgroundColor: tpl.previewColor }} />
-                    <div className="p-2 text-xs font-medium text-[#F8FAFC]">{tpl.name}</div>
-                  </button>
-                ))}
-              </div>
-              {filteredTemplates.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Sin resultados</p>}
-            </div>
-          )}
-
-          {activeTab === 'elementos' && (
-            <>
-              {!q && (
+            <div
+              ref={panelScrollRef}
+              onScroll={(e) => { scrollMap.current[activeTab] = e.currentTarget.scrollTop; }}
+              className="flex-1 overflow-y-auto px-4 pb-4 space-y-3"
+            >
+              {tq && activeTab !== 'plantillas' ? (
                 <div>
-                  <h3 className={sectionTitle}>Básicos</h3>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button onClick={addRect} title="Rectángulo" className={quickShape}>
-                      <div className="w-7 h-5 bg-[#C4B5FD] rounded-sm" />
-                    </button>
-                    <button onClick={addCircle} title="Círculo" className={quickShape}>
-                      <div className="w-6 h-6 bg-[#C4B5FD] rounded-full" />
-                    </button>
-                    <button onClick={addTriangle} title="Triángulo" className={quickShape}>
-                      <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-b-[16px] border-b-[#C4B5FD]" />
-                    </button>
-                    <button onClick={addLine} title="Línea" className={quickShape}>
-                      <div className="w-7 h-0.5 bg-[#C4B5FD]" />
-                    </button>
-                    <button onClick={addArrow} title="Flecha" className={quickShape}>
-                      <span className="text-[#C4B5FD] text-lg">→</span>
-                    </button>
-                    <button onClick={addStar} title="Estrella" className={quickShape}>
-                      <span className="text-[#C4B5FD] text-lg">★</span>
-                    </button>
+                  <h3 className={sectionTitle}>Resultados ({searchResults.length})</h3>
+                  <div className="space-y-0.5">
+                    {searchResults.map((x) => (
+                      <div key={x.tool.id}>
+                        {renderTool(x.tool)}
+                        <p className="text-[10px] text-[#A1A1B5] pl-9 -mt-1 mb-1">{x.cat}</p>
+                      </div>
+                    ))}
                   </div>
+                  {searchResults.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">No se encontró ninguna herramienta</p>}
                 </div>
-              )}
-
-              {!q && (
-                <div className="flex gap-1.5 flex-wrap">
-                  {SHAPE_CATEGORIES.map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setShapeCategory(cat)}
-                      className="px-2.5 py-1 rounded-full text-xs font-medium transition"
-                      style={{
-                        backgroundColor: shapeCategory === cat ? T.violet : 'rgba(255,255,255,0.06)',
-                        color: shapeCategory === cat ? '#fff' : T.textMuted,
-                      }}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <div className="grid grid-cols-4 gap-2">
-                {filteredShapes.map((s) => (
-                  <button key={s.id} onClick={() => addShapeIcon(s.id)} title={s.name} className={`${quickShape} aspect-square !p-2`}>
-                    <ShapeThumbnail def={s} />
-                  </button>
-                ))}
-              </div>
-              {filteredShapes.length === 0 && <p className="text-sm text-[#A1A1B5] text-center">Sin resultados</p>}
-            </>
-          )}
-
-          {activeTab === 'texto' && (
-            <div>
-              <h3 className={sectionTitle}>Texto</h3>
-              <div className="space-y-2">
-                <button onClick={() => addText('titulo')} className={panelBtn}>
-                  <span className="text-lg font-bold block">Añadir título</span>
-                </button>
-                <button onClick={() => addText('subtitulo')} className={panelBtn}>
-                  <span className="text-base font-semibold block">Añadir subtítulo</span>
-                </button>
-                <button onClick={() => addText('normal')} className={panelBtn}>
-                  <span className="text-sm block">Añadir texto</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'imagenes' && (
-            <div className="space-y-2">
-              <h3 className={sectionTitle}>Imágenes</h3>
-              <button onClick={() => fileInputRef.current?.click()} className={`${panelBtn} flex items-center gap-2`}>
-                <Upload size={16} /> Subir imagen
-              </button>
-              <button
-                onClick={() => setShowAIModal(true)}
-                className="w-full text-left px-3 py-2.5 rounded-lg text-sm font-semibold text-white flex items-center gap-2 transition hover:brightness-110"
-                style={{ background: `linear-gradient(135deg, ${T.violet}, #EC4899)` }}
-              >
-                <Sparkles size={16} /> Generar con IA
-              </button>
-            </div>
-          )}
-
-          {activeTab === 'dibujo' && (
-            <div className="space-y-4">
-              <h3 className={sectionTitle}>Pluma</h3>
-              <button
-                onClick={() => { setDrawMode((v) => !v); setSelectedId(null); }}
-                className="w-full px-3 py-2.5 rounded-lg text-sm font-semibold transition"
-                style={{
-                  backgroundColor: drawMode ? T.violet : 'transparent',
-                  color: '#fff',
-                  border: `1px solid ${drawMode ? T.violet : T.border}`,
-                }}
-              >
-                {drawMode ? '✏️ Pluma activa' : '✏️ Activar pluma'}
-              </button>
-
-              {drawMode && (
+              ) : (
                 <>
-                  <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Estilo</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { id: 'normal', label: 'Normal' },
-                        { id: 'marker', label: 'Marcador' },
-                        { id: 'pixel', label: 'Píxel' },
-                        { id: 'calligraphy', label: 'Plumín' },
-                        { id: 'sprite', label: 'Sprites' },
-                      ].map((b) => (
-                        <button
-                          key={b.id}
-                          onClick={() => { setBrushStyle(b.id as BrushStyle); setIsErasing(false); }}
-                          className="px-2 py-1.5 rounded-md text-xs border transition"
-                          style={{
-                            backgroundColor: brushStyle === b.id && !isErasing ? T.violet : 'transparent',
-                            borderColor: brushStyle === b.id && !isErasing ? T.violet : T.border,
-                            color: brushStyle === b.id && !isErasing ? '#fff' : T.textMuted,
-                          }}
-                        >
-                          {b.label}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => setIsErasing((v) => !v)}
-                        className="px-2 py-1.5 rounded-md text-xs border transition"
-                        style={{
-                          backgroundColor: isErasing ? '#DC2626' : 'transparent',
-                          borderColor: isErasing ? '#DC2626' : T.border,
-                          color: isErasing ? '#fff' : T.textMuted,
-                        }}
-                      >
-                        🧹 Borrador
-                      </button>
-                    </div>
-                  </div>
+                  {activeTab !== 'plantillas' && activeTab !== 'capas' && favTools.length > 0 && (
+                    <ToolGroup title="★ Accesos rápidos" open={isGroupOpen('fav', true)} onToggle={() => toggleGroup('fav', true)}>
+                      <div className="space-y-0.5">{favTools.map((t) => renderTool(t))}</div>
+                    </ToolGroup>
+                  )}
+                  {activeTab !== 'plantillas' && activeTab !== 'capas' && recentTools.length > 0 && (
+                    <ToolGroup title="Recientes" open={isGroupOpen('recents', false)} onToggle={() => toggleGroup('recents', false)}>
+                      <div className="space-y-0.5">{recentTools.map((t) => renderTool(t))}</div>
+                    </ToolGroup>
+                  )}
 
-                  {!isErasing && (
+                  {activeTab === 'plantillas' && (
                     <div>
-                      <label className="text-xs text-[#A1A1B5] block mb-1.5">Color</label>
-                      <input
-                        type="color"
-                        value={brushColor}
-                        onChange={(e) => setBrushColor(e.target.value)}
-                        className="w-full h-9 rounded-md cursor-pointer bg-transparent border border-[#30364A]"
-                      />
+                      <h3 className={sectionTitle}>Plantillas</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        {filteredTemplates.map((tpl) => (
+                          <button
+                            key={tpl.id}
+                            onClick={() => applyTemplate(tpl.id)}
+                            className="rounded-lg overflow-hidden border border-[#30364A] hover:border-[#7C3AED] transition text-left"
+                          >
+                            <div className="h-20 w-full" style={{ backgroundColor: tpl.previewColor }} />
+                            <div className="p-2 text-xs font-medium text-[#F8FAFC]">{tpl.name}</div>
+                          </button>
+                        ))}
+                      </div>
+                      {filteredTemplates.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Sin resultados</p>}
                     </div>
                   )}
 
-                  <div>
-                    <label className="text-xs text-[#A1A1B5] block mb-1.5">Grosor: {brushSize}px</label>
-                    <input
-                      type="range" min="2" max="40"
-                      value={brushSize}
-                      onChange={(e) => setBrushSize(parseFloat(e.target.value))}
-                      className="w-full accent-[#7C3AED]"
-                    />
-                  </div>
+                  {activeTab === 'dibujo' && (
+                    <>
+                      {drawMode && (
+                        <div className="flex items-center justify-between rounded-lg px-3 py-2" style={{ backgroundColor: 'rgba(124,58,237,0.18)', border: `1px solid ${T.violet}` }}>
+                          <span className="text-xs text-[#F8FAFC]">✏️ Dibujo activo</span>
+                          <button onClick={() => setDrawMode(false)} className="text-xs text-[#C4B5FD] hover:text-white">Salir</button>
+                        </div>
+                      )}
+                      <ToolGroup title="Configuración del pincel" open={isGroupOpen('dibujo.config', true)} onToggle={() => toggleGroup('dibujo.config', true)}>
+                        <div className="space-y-3 px-1 pt-1">
+                          {!isErasing && (
+                            <div>
+                              <label className="text-xs text-[#A1A1B5] block mb-1.5">Color</label>
+                              <input
+                                type="color"
+                                value={brushColor}
+                                onChange={(e) => setBrushColor(e.target.value)}
+                                className="w-full h-9 rounded-md cursor-pointer bg-transparent border border-[#30364A]"
+                              />
+                            </div>
+                          )}
+                          <div>
+                            <label className="text-xs text-[#A1A1B5] flex justify-between mb-1"><span>Tamaño</span><span>{brushSize}px</span></label>
+                            <input type="range" min="2" max="40" value={brushSize} onChange={(e) => setBrushSize(parseFloat(e.target.value))} className="w-full accent-[#7C3AED]" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-[#A1A1B5] flex justify-between mb-1"><span>Opacidad</span><span>{Math.round(brushOpacity * 100)}%</span></label>
+                            <input type="range" min="0.05" max="1" step="0.05" value={brushOpacity} onChange={(e) => setBrushOpacity(parseFloat(e.target.value))} className="w-full accent-[#7C3AED]" />
+                          </div>
+                          <div>
+                            <label className="text-xs text-[#A1A1B5] flex justify-between mb-1"><span>Suavizado</span><span>{brushSmooth}%</span></label>
+                            <input type="range" min="0" max="100" step="5" value={brushSmooth} onChange={(e) => setBrushSmooth(parseFloat(e.target.value))} className="w-full accent-[#7C3AED]" />
+                          </div>
+                        </div>
+                      </ToolGroup>
+                    </>
+                  )}
+
+                  {activeTab === 'capas' && (
+                    <div>
+                      <h3 className={sectionTitle}>Capas ({elements.length})</h3>
+                      {elements.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Aún no hay elementos</p>}
+                      <div className="space-y-1.5">
+                        {[...elements].reverse().map((el, idx, arr) => {
+                          const selected = el.id === selectedId;
+                          return (
+                            <div
+                              key={el.id}
+                              onClick={() => { if (!el.hidden) { setDrawMode(false); setSelectedId(el.id); } }}
+                              className="flex items-center gap-1 rounded-lg px-2 py-1.5 cursor-pointer border transition"
+                              style={{
+                                borderColor: selected ? T.violet : T.border,
+                                backgroundColor: selected ? 'rgba(124,58,237,0.15)' : 'transparent',
+                                opacity: el.hidden ? 0.5 : 1,
+                              }}
+                            >
+                              <span className="flex-1 text-xs truncate text-[#F8FAFC]">{layerLabel(el)}</span>
+                              <button title="Subir" disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronUp size={14} /></button>
+                              <button title="Bajar" disabled={idx === arr.length - 1} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, -1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronDown size={14} /></button>
+                              <button title={el.hidden ? 'Mostrar' : 'Ocultar'} onClick={(e) => { e.stopPropagation(); toggleHiddenById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                              <button title={el.locked ? 'Desbloquear' : 'Bloquear'} onClick={(e) => { e.stopPropagation(); toggleLockById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.locked ? <Lock size={14} /> : <Unlock size={14} />}</button>
+                              <button title="Eliminar" onClick={(e) => { e.stopPropagation(); deleteById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6 hover:!text-red-400`}><Trash2 size={14} /></button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-[11px] text-[#A1A1B5] mt-3">La capa de arriba es la que queda al frente.</p>
+                    </div>
+                  )}
+
+                  {(CATS[activeTab] || []).map((g, ci) => renderGroup(g, ci, activeTab))}
                 </>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'capas' && (
-            <div>
-              <h3 className={sectionTitle}>Capas ({elements.length})</h3>
-              {elements.length === 0 && <p className="text-sm text-[#A1A1B5] text-center mt-4">Aún no hay elementos</p>}
-              <div className="space-y-1.5">
-                {[...elements].reverse().map((el, idx, arr) => {
-                  const selected = el.id === selectedId;
-                  return (
-                    <div
-                      key={el.id}
-                      onClick={() => { if (!el.hidden) { setDrawMode(false); setSelectedId(el.id); } }}
-                      className="flex items-center gap-1 rounded-lg px-2 py-1.5 cursor-pointer border transition"
-                      style={{
-                        borderColor: selected ? T.violet : T.border,
-                        backgroundColor: selected ? 'rgba(124,58,237,0.15)' : 'transparent',
-                        opacity: el.hidden ? 0.5 : 1,
-                      }}
-                    >
-                      <span className="flex-1 text-xs truncate text-[#F8FAFC]">{layerLabel(el)}</span>
-                      <button title="Subir" disabled={idx === 0} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, 1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronUp size={14} /></button>
-                      <button title="Bajar" disabled={idx === arr.length - 1} onClick={(e) => { e.stopPropagation(); moveLayer(el.id, -1); }} className={`${ui.iconBtn} !h-6 !w-6`}><ChevronDown size={14} /></button>
-                      <button title={el.hidden ? 'Mostrar' : 'Ocultar'} onClick={(e) => { e.stopPropagation(); toggleHiddenById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.hidden ? <EyeOff size={14} /> : <Eye size={14} />}</button>
-                      <button title={el.locked ? 'Desbloquear' : 'Bloquear'} onClick={(e) => { e.stopPropagation(); toggleLockById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6`}>{el.locked ? <Lock size={14} /> : <Unlock size={14} />}</button>
-                      <button title="Eliminar" onClick={(e) => { e.stopPropagation(); deleteById(el.id); }} className={`${ui.iconBtn} !h-6 !w-6 hover:!text-red-400`}><Trash2 size={14} /></button>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-[#A1A1B5] mt-3">La capa de arriba es la que queda al frente.</p>
-            </div>
-          )}
-
-          {activeTab === 'marca' && (
-            <div className="space-y-2">
-              <h3 className={sectionTitle}>Marca y página</h3>
-              <button onClick={applyMyBrand} className={`${panelBtn} flex items-center gap-2`}>
-                <Palette size={16} /> Aplicar mi marca
-              </button>
-              <button onClick={() => { setSelectedId(null); setShowBgPanel(true); }} className={`${panelBtn} flex items-center gap-2`}>
-                <PaintBucket size={16} /> Fondo de página
-              </button>
-              <button onClick={insertQRCode} className={`${panelBtn} flex items-center gap-2`}>
-                <QrCode size={16} /> Insertar código QR
-              </button>
-            </div>
-          )}
-
-          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
-        </div>
+        <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageUpload} className="hidden" />
 
         {/* Canvas central */}
         <div
@@ -1877,6 +2110,12 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                         rotation={el.rotation || 0}
                         opacity={el.opacity ?? 1}
                         wrap="word"
+                        stroke={el.strokeColor}
+                        strokeWidth={el.strokeWidth || 0}
+                        shadowColor={el.shadowColor}
+                        shadowBlur={el.shadowBlur || 0}
+                        shadowOffsetX={el.shadowOffsetX || 0}
+                        shadowOffsetY={el.shadowOffsetY || 0}
                         draggable={!el.locked}
                         onClick={() => setSelectedId(el.id)}
                         onTap={() => setSelectedId(el.id)}
@@ -1955,9 +2194,10 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                         stroke={el.fill}
                         strokeWidth={el.strokeWidth || 6}
                         opacity={el.opacity ?? 1}
-                        lineCap={el.brushStyle === 'calligraphy' ? 'square' : 'round'}
+                        lineCap={el.brushStyle === 'calligraphy' || el.brushStyle === 'chalk' ? 'square' : 'round'}
                         lineJoin={el.brushStyle === 'calligraphy' ? 'miter' : 'round'}
-                        tension={el.brushStyle === 'pixel' ? 0 : 0.4}
+                        tension={el.brushStyle === 'pixel' || el.brushStyle === 'straight' ? 0 : (el.tension ?? 0.4)}
+                        {...brushExtras(el)}
                         globalCompositeOperation={el.isEraser ? 'destination-out' : 'source-over'}
                         draggable={!el.locked && !drawMode}
                         onClick={() => setSelectedId(el.id)}
@@ -2357,6 +2597,8 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                 />
               </div>
 
+              <Collapsible title="Borde y sombra">
+              <div className="space-y-4 pt-1">
               <div>
                 <label className="text-xs text-[#A1A1B5] block mb-1">Borde / Trazo</label>
                 <div className="flex gap-2 items-center">
@@ -2408,6 +2650,10 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                 </div>
               </div>
 
+              </div>
+              </Collapsible>
+              <Collapsible title="Posición y orden" defaultOpen>
+              <div className="space-y-4 pt-1">
               <div>
                 <label className="text-xs text-[#A1A1B5] block mb-1">Alinear en canvas</label>
                 <div className="flex gap-2">
@@ -2423,6 +2669,9 @@ export default function CanvasEditor({ posterId, defaultType }: { posterId?: str
                   <button onClick={sendToBack} className="flex-1 border border-[#30364A] rounded-md py-2 text-xs hover:bg-white/10">Enviar al fondo</button>
                 </div>
               </div>
+
+              </div>
+              </Collapsible>
 
               <div className="flex gap-2 pt-2 border-t border-[#30364A]">
                 <button onClick={toggleLock} className={`flex-1 border border-[#30364A] rounded-md py-2 text-sm ${selectedElement.locked ? 'bg-[#7C3AED] text-white' : 'hover:bg-white/10'}`}>
